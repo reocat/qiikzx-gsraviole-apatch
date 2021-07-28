@@ -67,6 +67,8 @@ struct touch_offload_context {
 	struct file file;
 	struct mutex file_lock;
 	bool file_in_use;
+	bool multiple_panels = false;
+	char device_name[32];
 
 	/* touch capabilities */
 	struct TouchOffloadCaps caps;
