@@ -10,11 +10,28 @@ bigocean-$(CONFIG_DEBUG_FS) += bigo_debug.o
 
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 M ?= $(shell pwd)
+KERNEL_UAPI_HEADERS_DIR ?= $(shell readlink -m ${COMMON_OUT_DIR}/kernel_uapi_headers)
 
 KBUILD_OPTIONS += CONFIG_BIGOCEAN=m CONFIG_SLC_PARTITION_MANAGER=m \
 		  CONFIG_DEBUG_FS=m
 
 ccflags-y := -I$(KERNEL_SRC)/../google-modules/video/gchips
 
-modules modules_install clean:
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS) W=1 $(@)
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/video/gchips/include
+
+modules modules_install: headers_install
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
+	$(KBUILD_OPTIONS) \
+	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+	$(@)
+
+headers_install:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
+	INSTALL_HDR_PATH="${KERNEL_UAPI_HEADERS_DIR}/usr" \
+	$(@)
+
+clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
+	$(KBUILD_OPTIONS) \
+	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+	$(@)
