@@ -17,6 +17,7 @@
 #include <linux/uaccess.h>
 #include <linux/platform_data/sscoredump.h>
 #include <linux/soc/samsung/exynos-smc.h>
+#include <linux/kthread.h>
 
 #include "bigo_io.h"
 #include "bigo_iommu.h"
@@ -25,6 +26,7 @@
 #include "bigo_priv.h"
 #include "bigo_slc.h"
 #include "bigo_debug.h"
+#include "bigo_prioq.h"
 
 #define BIGO_DEVCLASS_NAME "video_codec"
 #define BIGO_CHRDEV_NAME "bigocean"
@@ -33,6 +35,8 @@
 #define DEFAULT_HEIGHT 2160
 #define DEFAULT_FPS 60
 #define BIGO_SMC_ID 0xd
+
+static int bigo_worker_thread(void *data);
 
 static struct sscd_platform_data bigo_sscd_platdata;
 
@@ -72,27 +76,47 @@ static void bigo_coredump(struct bigo_core *core, const char *crash_info)
 
 static inline int on_first_instance_open(struct bigo_core *core)
 {
-	int rc = bigo_pt_client_enable(core);
+	int rc;
 
-	if (rc)
+	core->worker_thread = kthread_run(bigo_worker_thread, (void*)core,
+					"bigo_worker_thread");
+	if (IS_ERR(core->worker_thread)) {
+		rc = PTR_ERR(core->worker_thread);
+		core->worker_thread = NULL;
+		pr_err("failed to create worker thread rc = %d\n", rc);
+		goto exit;
+	}
+
+	rc = bigo_pt_client_enable(core);
+	if (rc) {
 		pr_info("failed to enable SLC");
+		kthread_stop(core->worker_thread);
+		goto exit;
+	}
 #if IS_ENABLED(CONFIG_PM)
 	rc = pm_runtime_get_sync(core->dev);
-	if (rc)
+	if (rc) {
 		pr_err("failed to resume: %d\n", rc);
+		kthread_stop(core->worker_thread);
+	}
 #endif
+
+exit:
 	return rc;
 }
 
 static inline void on_last_inst_close(struct bigo_core *core)
 {
+	int rc;
 #if IS_ENABLED(CONFIG_PM)
 	if (pm_runtime_put_sync_suspend(core->dev))
 		pr_warn("failed to suspend\n");
 #endif
 	bigo_pt_client_disable(core);
-	kfree(core->job.regs);
-	core->job.regs = NULL;
+
+	rc = kthread_stop(core->worker_thread);
+	if(rc)
+		pr_err("failed to stop worker thread rc = %d\n", rc);
 }
 
 static int bigo_open(struct inode *inode, struct file *file)
@@ -109,49 +133,73 @@ static int bigo_open(struct inode *inode, struct file *file)
 	}
 	INIT_LIST_HEAD(&inst->list);
 	INIT_LIST_HEAD(&inst->buffers);
+	kref_init(&inst->refcount);
 	mutex_init(&inst->lock);
+	init_completion(&inst->job_comp);
 	file->private_data = inst;
 	inst->height = DEFAULT_WIDTH;
 	inst->width = DEFAULT_HEIGHT;
 	inst->fps = DEFAULT_FPS;
 	inst->core = core;
+	inst->job.regs_size = core->regs_size;
+	inst->job.regs = kzalloc(core->regs_size, GFP_KERNEL);
+	if (!inst->job.regs) {
+		rc = -ENOMEM;
+		pr_err("Failed to alloc job regs\n");
+		goto err_first_inst;
+	}
 	mutex_lock(&core->lock);
 	if (list_empty(&core->instances)) {
 		rc = on_first_instance_open(core);
 		if (rc) {
 			pr_err("failed to setup first instance");
 			mutex_unlock(&core->lock);
-			goto err;
+			goto err_inst_open;
 		}
 	}
 	list_add_tail(&inst->list, &core->instances);
 	mutex_unlock(&core->lock);
 	bigo_update_qos(core);
-	pr_info("opened bigocean instance\n");
+	pr_info("opened instance\n");
+	return rc;
 
+err_inst_open:
+	kfree(inst->job.regs);
+err_first_inst:
+	kfree(inst);
 err:
 	return rc;
 }
 
-static int bigo_release(struct inode *inode, struct file *file)
+static void bigo_close(struct kref *ref)
 {
-	struct bigo_core *core =
-		container_of(inode->i_cdev, struct bigo_core, cdev);
-	struct bigo_inst *inst = file->private_data;
+	struct bigo_inst *inst = container_of(ref, struct bigo_inst, refcount);
+	struct bigo_core *core = inst->core;
 
 	if (!inst || !core) {
 		pr_err("No instance or core\n");
-		return -EINVAL;
+		return;
 	}
 	bigo_unmap_all(inst);
 	mutex_lock(&core->lock);
 	list_del(&inst->list);
+	kfree(inst->job.regs);
 	kfree(inst);
 	if (list_empty(&core->instances))
 		on_last_inst_close(core);
 	mutex_unlock(&core->lock);
 	bigo_update_qos(core);
-	pr_info("closed bigocean instance\n");
+	pr_info("closed instance\n");
+}
+
+static int bigo_release(struct inode *inode, struct file *file)
+{
+	struct bigo_inst *inst = file->private_data;
+
+	if (!inst)
+		return -EINVAL;
+
+	kref_put(&inst->refcount, bigo_close);
 	return 0;
 }
 
@@ -191,55 +239,6 @@ static int bigo_run_job(struct bigo_core *core, struct bigo_job *job)
 	return rc;
 }
 
-static int bigo_process(struct bigo_core *core, struct bigo_ioc_regs *desc)
-{
-	int rc = 0;
-	struct bigo_job *job = &core->job;
-
-	if (!desc) {
-		pr_err("Invalid input\n");
-		return -EINVAL;
-	}
-	if (desc->regs_size != core->regs_size) {
-		pr_err("Register size passed from userspace(%u) is different(%u)\n",
-		       (unsigned int)desc->regs_size, core->regs_size);
-		return -EINVAL;
-	}
-
-	mutex_lock(&core->lock);
-
-	if (!job->regs) {
-		job->regs = kzalloc(core->regs_size, GFP_KERNEL);
-		if (!job->regs) {
-			rc = -ENOMEM;
-			goto unlock;
-		}
-	}
-
-	if (copy_from_user(job->regs, (void *)desc->regs, core->regs_size)) {
-		pr_err("Failed to copy from user\n");
-		rc = -EFAULT;
-		goto unlock;
-	}
-
-	/*TODO(vinaykalia@): Replace this with EDF scheduler.*/
-	rc = bigo_run_job(core, job);
-	if (rc) {
-		pr_err("Error running job\n");
-		goto unlock;
-	}
-
-	if (copy_to_user((void *)desc->regs, job->regs, core->regs_size)) {
-		pr_err("Failed to copy to user\n");
-		rc = -EFAULT;
-		goto unlock;
-	}
-
-unlock:
-	mutex_unlock(&core->lock);
-	return rc;
-}
-
 inline void bigo_config_frmrate(struct bigo_inst *inst, __u32 frmrate)
 {
 	mutex_lock(&inst->lock);
@@ -265,6 +264,50 @@ inline void bigo_config_secure(struct bigo_inst *inst, __u32 is_secure)
 	mutex_unlock(&inst->lock);
 }
 
+inline void bigo_config_priority(struct bigo_inst *inst, __s32 priority)
+{
+	if (priority < 0 || priority >= BO_MAX_PRIO)
+		return;
+	mutex_lock(&inst->lock);
+	inst->priority = priority;
+	mutex_unlock(&inst->lock);
+}
+
+static int copy_regs_from_user(struct bigo_core *core,
+			struct bigo_ioc_regs *desc,
+			void __user *user_desc,
+			struct bigo_job *job)
+{
+	if (!core || !desc || !user_desc || !job)
+		return -EINVAL;
+
+	if (copy_from_user(desc, user_desc, sizeof(*desc)))
+		return -EFAULT;
+
+	if (desc->regs_size != core->regs_size) {
+		pr_err("Reg size of userspace(%u) is different(%u)\n",
+		(unsigned int)desc->regs_size, core->regs_size);
+		return -EINVAL;
+	}
+
+	if (copy_from_user(job->regs, (void *)desc->regs, desc->regs_size))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int copy_regs_to_user(struct bigo_ioc_regs *desc,
+				struct bigo_job *job)
+{
+	if (!desc || !job)
+		return -EINVAL;
+
+	if (copy_to_user((void *)desc->regs, job->regs, desc->regs_size))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 				unsigned long arg)
 {
@@ -272,7 +315,6 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 	struct bigo_core *core =
 		container_of(file->f_inode->i_cdev, struct bigo_core, cdev);
 	void __user *user_desc = (void __user *)arg;
-	struct bigo_ioc_regs desc;
 	struct bigo_ioc_mapping mapping;
 	struct bigo_ioc_frmsize frmsize;
 	struct bigo_cache_info cinfo;
@@ -292,31 +334,41 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 	}
 	switch (cmd) {
 	case BIGO_IOCX_PROCESS:
-		if (copy_from_user(&desc, user_desc, sizeof(desc))) {
-			pr_err("Failed to copy from user\n");
+	{
+		struct bigo_ioc_regs desc;
+		struct bigo_job *job = &inst->job;
+		long ret;
+
+		if (copy_regs_from_user(core, &desc, user_desc, job)) {
+			pr_err("Failed to copy regs from user\n");
 			return -EFAULT;
 		}
 
-		if (inst->is_secure) {
-			rc = exynos_smc(SMC_PROTECTION_SET, 0, BIGO_SMC_ID,
-					SMC_PROTECTION_ENABLE);
-			if (rc) {
-				pr_err("failed to enable SMC_PROTECTION_SET: %d\n", rc);
-				break;
-			}
+		if(enqueue_prioq(core, inst)) {
+			pr_err("Failed enqueue frame\n");
+			return -EFAULT;
 		}
 
-		rc = bigo_process(core, &desc);
-		if (rc)
-			pr_err("Error processing data: %d\n", rc);
+		ret = wait_for_completion_timeout(
+			&inst->job_comp,
+			msecs_to_jiffies(JOB_COMPLETE_TIMEOUT_MS * 16));
+		if (!ret) {
+			pr_err("timed out waiting for HW: %d\n", rc);
+			rc = -ETIMEDOUT;
+		} else {
+			rc = (ret > 0) ? 0 : ret;
+		}
 
-		if (inst->is_secure) {
-			rc = exynos_smc(SMC_PROTECTION_SET, 0, BIGO_SMC_ID,
-					SMC_PROTECTION_DISABLE);
-			if (rc)
-				pr_err("failed to disable SMC_PROTECTION_SET: %d\n", rc);
+		if (rc)
+			break;
+
+		rc = job->status;
+		if(copy_regs_to_user(&desc, job)) {
+			pr_err("Failed to copy regs to user\n");
+			rc = -EFAULT;
 		}
 		break;
+	}
 	case BIGO_IOCX_MAP:
 		if (copy_from_user(&mapping, user_desc, sizeof(mapping))) {
 			pr_err("Failed to copy from user\n");
@@ -362,6 +414,11 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 	case BIGO_IOCX_CONFIG_SECURE: {
 		u32 is_secure = (u32)arg;
 		bigo_config_secure(inst, is_secure);
+		break;
+	}
+	case BIGO_IOCX_CONFIG_PRIORITY: {
+		s32 priority = (s32)arg;
+		bigo_config_priority(inst, priority);
 		break;
 	}
 	case BIGO_IOCX_ABORT:
@@ -461,9 +518,62 @@ static void deinit_chardev(struct bigo_core *core)
 	unregister_chrdev_region(core->devno, 1);
 }
 
+static int bigo_worker_thread(void *data)
+{
+	struct bigo_core *core = (struct bigo_core *)data;
+	struct bigo_inst *inst;
+	struct bigo_job *job;
+	bool should_stop;
+	int rc;
+
+	if (!core)
+		return -ENOMEM;
+
+	while(1) {
+		wait_event(core->worker,
+			dequeue_prioq(core, &job, &should_stop));
+		if(should_stop) {
+			pr_info("worker thread received stop signal, exit\n");
+			return 0;
+		}
+		if (!job)
+			continue;
+
+		inst = container_of(job, struct bigo_inst, job);
+		if (inst->is_secure) {
+			rc = exynos_smc(SMC_PROTECTION_SET, 0, BIGO_SMC_ID,
+					SMC_PROTECTION_ENABLE);
+			if (rc) {
+				pr_err("failed to enable SMC_PROTECTION_SET: %d\n", rc);
+				goto done;
+			}
+		}
+
+		rc = bigo_run_job(core, job);
+		if (rc) {
+			pr_err("Error running job\n");
+			goto done;
+		}
+
+		if (inst->is_secure) {
+			rc = exynos_smc(SMC_PROTECTION_SET, 0, BIGO_SMC_ID,
+					SMC_PROTECTION_DISABLE);
+			if (rc)
+				pr_err("failed to disable SMC_PROTECTION_SET: %d\n", rc);
+		}
+
+	done:
+		job->status = rc;
+		complete(&inst->job_comp);
+		kref_put(&inst->refcount, bigo_close);
+	}
+	return 0;
+}
+
 static int bigo_probe(struct platform_device *pdev)
 {
 	int rc = 0;
+	int i;
 	struct bigo_core *core;
 
 	core = devm_kzalloc(&pdev->dev, sizeof(struct bigo_core), GFP_KERNEL);
@@ -473,11 +583,15 @@ static int bigo_probe(struct platform_device *pdev)
 	}
 
 	mutex_init(&core->lock);
+	mutex_init(&core->prioq.lock);
 	INIT_LIST_HEAD(&core->instances);
 	INIT_LIST_HEAD(&core->pm.opps);
 	INIT_LIST_HEAD(&core->pm.bw);
+	for(i = 0; i < BO_MAX_PRIO; ++i)
+		INIT_LIST_HEAD(&core->prioq.queue[i]);
 	spin_lock_init(&core->status_lock);
 	init_completion(&core->frame_done);
+	init_waitqueue_head(&core->worker);
 	core->dev = &pdev->dev;
 	platform_set_drvdata(pdev, core);
 
