@@ -4,7 +4,6 @@ obj-$(CONFIG_TOUCHSCREEN_OFFLOAD)	+= touch_offload.o
 
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 M ?= $(shell pwd)
-KERNEL_UAPI_HEADERS_DIR ?= $(shell readlink -m ${COMMON_OUT_DIR}/kernel_uapi_headers)
 
 KBUILD_OPTIONS	+= CONFIG_TOUCHSCREEN_TBN=m
 KBUILD_OPTIONS	+= CONFIG_TOUCHSCREEN_HEATMAP=m
@@ -26,5 +25,4 @@ modules_install: headers_install
 
 headers_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
-	INSTALL_HDR_PATH="${KERNEL_UAPI_HEADERS_DIR}/usr" \
 	$(@)
