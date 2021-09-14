@@ -18,7 +18,7 @@ ccflags-y := -I$(KERNEL_SRC)/../google-modules/video/gchips
 
 EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/video/gchips/include
 
-modules modules_install: headers_install
+modules modules_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
 	$(KBUILD_OPTIONS) \
 	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
