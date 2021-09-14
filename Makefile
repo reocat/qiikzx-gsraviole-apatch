@@ -17,7 +17,7 @@ modules clean:
 	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
 	$(@)
 
-modules_install: headers_install
+modules_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
 	$(KBUILD_OPTIONS) \
 	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
