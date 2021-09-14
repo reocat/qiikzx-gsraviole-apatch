@@ -10,7 +10,6 @@ bigocean-$(CONFIG_DEBUG_FS) += bigo_debug.o
 
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 M ?= $(shell pwd)
-KERNEL_UAPI_HEADERS_DIR ?= $(shell readlink -m ${COMMON_OUT_DIR}/kernel_uapi_headers)
 
 KBUILD_OPTIONS += CONFIG_BIGOCEAN=m CONFIG_SLC_PARTITION_MANAGER=m \
 		  CONFIG_DEBUG_FS=m
@@ -27,7 +26,6 @@ modules modules_install: headers_install
 
 headers_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
-	INSTALL_HDR_PATH="${KERNEL_UAPI_HEADERS_DIR}/usr" \
 	$(@)
 
 clean:
