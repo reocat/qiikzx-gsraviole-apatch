@@ -90,14 +90,15 @@ static void hall_sensor_close(struct input_dev *input)
 		gpio_to_irq(hall_data->irq_gpio));
 }
 
-static void create_input_device(struct hall_sensor_drv_data *hall_data) {
+static int create_input_device(struct hall_sensor_drv_data *hall_data) {
 	struct device *dev = hall_data->dev;
 	struct input_dev *input;
+	int ret;
 
 	input = devm_input_allocate_device(dev);
 	if (!input) {
 		dev_err(dev, "Failed to allocate input device\n");
-		return;
+		return -ENOMEM;
 	}
 
 	hall_data->input = input;
@@ -116,13 +117,14 @@ static void create_input_device(struct hall_sensor_drv_data *hall_data) {
 	set_bit(EV_SYN, input->evbit);
 	input_set_capability(input, EV_SW, SW_LID);
 
-	if (input_register_device(input)) {
+	ret = input_register_device(input);
+	if (ret) {
 		dev_err(dev, "Failed to register input device\n");
 		hall_data->input = NULL;
 		input_free_device(input);
 	}
 
-	return;
+	return ret;
 }
 
 static void destroy_input_device(struct hall_sensor_drv_data *hall_data) {
@@ -248,6 +250,12 @@ static int hall_sensor_probe(struct platform_device *pdev) {
 
 	hall_data->irq_enabled = false;
 	hall_data->prev_state = -1;
+
+	ret = create_input_device(hall_data);
+	if (ret) {
+		dev_err(dev, "Failed to create input device with error %d.\n", ret);
+		return ret;
+	}
 
 	ret = sysfs_create_group(&dev->kobj, &attribute_group);
 	if (ret) {
