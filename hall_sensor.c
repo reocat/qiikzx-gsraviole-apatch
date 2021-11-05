@@ -168,9 +168,8 @@ static ssize_t enable_store(struct device *dev,
 	const char *buf, size_t count) {
 	struct hall_sensor_drv_data *hall_data = dev_get_drvdata(dev);
 	int val;
-	int result;
 
-	result = kstrtoint(buf, 10, &val);
+	kstrtoint(buf, 10, &val);
 
 	hall_sensor_enable(hall_data, !!val);
 
