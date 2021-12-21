@@ -627,7 +627,13 @@ static int bigo_probe(struct platform_device *pdev)
 		goto err_fault_handler;
 	}
 
-	bigo_pt_client_register(pdev->dev.of_node, core);
+	rc = bigo_pt_client_register(pdev->dev.of_node, core);
+	if (rc == -EPROBE_DEFER) {
+		pr_warn("pt_client returns -EPROBE_DEFER, try again later\n");
+		goto err_fault_handler;
+	} else {
+		rc = 0;
+	}
 
 	if(platform_device_register(&bigo_sscd_dev))
 		pr_warn("Failed to register bigo_sscd_dev.\n");
