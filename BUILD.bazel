@@ -18,6 +18,16 @@ filegroup(
     ],
 )
 
+filegroup(
+    name = "common.kconfig",
+    srcs = glob([
+        "Kconfig",
+    ]),
+    visibility = [
+        "//gs/google-modules/soc-modules:__pkg__",
+    ],
+)
+
 kernel_module(
     name = "common.slider",
     outs = [
