@@ -25,9 +25,9 @@ kernel_module(
         "touch_bus_negotiator.ko",
         "touch_offload.ko",
     ],
-    kernel_build = "//gs/kernel/device-modules:slider",
+    kernel_build = "//gs/google-modules/soc-modules:slider",
     visibility = [
         "//gs/google-modules/touch:__subpackages__",
-        "//gs/kernel/device-modules:__pkg__",
+        "//gs/google-modules/soc-modules:__pkg__",
     ],
 )
