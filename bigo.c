@@ -630,7 +630,7 @@ static int bigo_probe(struct platform_device *pdev)
 	rc = bigo_pt_client_register(pdev->dev.of_node, core);
 	if (rc == -EPROBE_DEFER) {
 		pr_warn("pt_client returns -EPROBE_DEFER, try again later\n");
-		goto err_fault_handler;
+		goto err_pt_client;
 	} else {
 		rc = 0;
 	}
@@ -642,6 +642,8 @@ static int bigo_probe(struct platform_device *pdev)
 
 	return rc;
 
+err_pt_client:
+	iommu_unregister_device_fault_handler(&pdev->dev);
 err_fault_handler:
 	pm_runtime_disable(&pdev->dev);
 err_io:
