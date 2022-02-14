@@ -49,29 +49,33 @@ int edgetpu_get_debug_dump(struct edgetpu_dev *etdev, u64 type)
 {
 	int ret;
 	struct edgetpu_debug_dump_setup *dump_setup;
+	bool init_fw_dump_buffer = false;
 
 	if (!etdev->debug_dump_mem.vaddr) {
-		etdev_err(etdev, "Debug dump not allocated");
+		etdev_dbg(etdev, "Debug dump not allocated");
 		return -EINVAL;
 	}
 
-	if (!edgetpu_pm_get_if_powered(etdev->pm)) {
-		etdev_warn(etdev, "Device not powered, skip debug dump");
-		return -ENODEV;
+	if (type) {
+		dump_setup =
+			(struct edgetpu_debug_dump_setup *)etdev->debug_dump_mem.vaddr;
+		dump_setup->type = type;
+	} else {
+		init_fw_dump_buffer = true;
 	}
-	dump_setup =
-		(struct edgetpu_debug_dump_setup *)etdev->debug_dump_mem.vaddr;
-	dump_setup->type = type;
 	/* Signal the type of dump and buffer address to firmware */
 	ret = edgetpu_kci_get_debug_dump(etdev->kci,
 					 etdev->debug_dump_mem.tpu_addr,
-					 etdev->debug_dump_mem.size);
+					 etdev->debug_dump_mem.size, init_fw_dump_buffer);
 	etdev_dbg(etdev, "Sent debug dump request, tpu addr: %llx",
 		  (u64)etdev->debug_dump_mem.tpu_addr);
-	if (ret)
-		etdev_err(etdev, "KCI dump info req failed: %d", ret);
+	if (ret) {
+		if (init_fw_dump_buffer)
+			etdev_err(etdev, "failed to init dump buffer in FW");
 
-	edgetpu_pm_put(etdev->pm);
+		etdev_err(etdev, "Debug dump KCI req failed: %d", ret);
+	}
+
 	return ret;
 }
 
