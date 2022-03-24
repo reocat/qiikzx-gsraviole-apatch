@@ -162,22 +162,31 @@ void goog_offload_input_report(void *handle,
 {
 	struct goog_touch_interface *gti = (struct goog_touch_interface *)handle;
 	bool touch_down = 0;
+	unsigned int tool_type = MT_TOOL_FINGER;
 	int i;
 
 	ATRACE_BEGIN(__func__);
 
-	/*
-	 * TODO(b/201610482):
-	 * if status is COORD_STATUS_PALM, chage the tool_type to MT_TOOL_PALM as cancel evnets.
-	 */
 	goog_input_lock(gti);
 	input_set_timestamp(gti->input_dev, report->timestamp);
 	for (i = 0; i < MAX_COORDS; i++) {
-		if (report->coords[i].status == COORD_STATUS_FINGER) {
+		if (report->coords[i].status != COORD_STATUS_INACTIVE) {
+			switch (report->coords[i].status) {
+			case COORD_STATUS_EDGE:
+			case COORD_STATUS_PALM:
+			case COORD_STATUS_CANCEL:
+				tool_type = MT_TOOL_PALM;
+				break;
+			case COORD_STATUS_FINGER:
+			case COORD_STATUS_PEN:
+			default:
+				tool_type = MT_TOOL_FINGER;
+				break;
+			}
 			input_mt_slot(gti->input_dev, i);
 			touch_down = 1;
 			input_report_key(gti->input_dev, BTN_TOUCH, touch_down);
-			input_mt_report_slot_state(gti->input_dev, MT_TOOL_FINGER, 1);
+			input_mt_report_slot_state(gti->input_dev, tool_type, 1);
 			input_report_abs(gti->input_dev, ABS_MT_POSITION_X,
 				report->coords[i].x);
 			input_report_abs(gti->input_dev, ABS_MT_POSITION_Y,
