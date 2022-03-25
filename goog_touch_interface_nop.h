@@ -69,10 +69,10 @@ static inline int goog_input_process(struct goog_touch_interface *gti)
 }
 
 static inline struct goog_touch_interface *goog_touch_interface_probe(
-    void *vendor_private_data,
-    struct device *dev,
-    struct input_dev *input_dev,
-    int (*get_data_cb)(void *, u32, u8 **, u32 *))
+	void *vendor_private_data,
+	struct device *dev,
+	struct input_dev *input_dev,
+	int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size))
 {
 	static struct goog_touch_interface gti[1];
 

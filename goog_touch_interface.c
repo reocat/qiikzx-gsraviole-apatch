@@ -58,7 +58,7 @@ void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 }
 
 void goog_offload_populate_mutual_channel(struct goog_touch_interface *gti,
-		struct touch_offload_frame *frame, int channel, u8 *ptr, u32 size)
+		struct touch_offload_frame *frame, int channel, u8 *buffer, u32 size)
 {
 	struct TouchOffloadData2d *mutual =
 		(struct TouchOffloadData2d *)frame->channel_data[channel];
@@ -69,11 +69,11 @@ void goog_offload_populate_mutual_channel(struct goog_touch_interface *gti,
 	mutual->header.channel_size =
 		TOUCH_OFFLOAD_FRAME_SIZE_2D(mutual->rx_size, mutual->tx_size);
 
-	memcpy(mutual->data, ptr, size);
+	memcpy(mutual->data, buffer, size);
 }
 
 void goog_offload_populate_self_channel(struct goog_touch_interface *gti,
-		struct touch_offload_frame *frame, int channel, u8 *ptr, u32 size)
+		struct touch_offload_frame *frame, int channel, u8 *buffer, u32 size)
 {
 	struct TouchOffloadData1d *self =
 		(struct TouchOffloadData1d *)frame->channel_data[channel];
@@ -84,7 +84,7 @@ void goog_offload_populate_self_channel(struct goog_touch_interface *gti,
 	self->header.channel_size =
 		TOUCH_OFFLOAD_FRAME_SIZE_1D(self->rx_size, self->tx_size);
 
-	memcpy(self->data, ptr, size);
+	memcpy(self->data, buffer, size);
 }
 
 void goog_offload_populate_frame(struct goog_touch_interface *gti,
@@ -93,9 +93,11 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	static u64 index;
 	u8 channel_type;
 	int i;
-	u8 *ptr;
+	u8 *buffer;
 	u32 size;
 	int ret;
+	u16 tx = gti->offload.caps.tx_size;
+	u16 rx = gti->offload.caps.rx_size;
 
 	frame->header.index = index++;
 	frame->header.timestamp = gti->timestamp;
@@ -111,7 +113,7 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	for (i = 0; i < frame->num_channels; i++) {
 		channel_type = frame->channel_type[i];
 		GOOG_DBG("#%d: get data(type %#x) from vendor driver", i, channel_type);
-		ptr = NULL;
+		buffer = NULL;
 		size = 0;
 		ret = 0;
 		if (channel_type == TOUCH_DATA_TYPE_COORD) {
@@ -120,21 +122,21 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 			ATRACE_END();
 		} else if (channel_type & TOUCH_SCAN_TYPE_MUTUAL) {
 			ATRACE_BEGIN("populate mutual data");
-			ret = gti->get_channel_data_cb(gti->vendor_private_data, channel_type,
-						&ptr, &size);
-			if (ret == 0 && ptr && size) {
-				goog_offload_populate_mutual_channel(gti, frame, i, ptr, size);
+			ret = gti->vendor_cb(gti->vendor_private_data, GTI_CMD_GET_SENSOR_DATA,
+					channel_type, &buffer, &size);
+			if (ret == 0 && buffer && size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
+				goog_offload_populate_mutual_channel(gti, frame, i, buffer, size);
 				/* Backup strength data for v4l2. */
 				if (channel_type & TOUCH_DATA_TYPE_STRENGTH)
-					memcpy(gti->heatmap_buf, ptr, size);
+					memcpy(gti->heatmap_buf, buffer, size);
 			}
 			ATRACE_END();
 		} else if (channel_type & TOUCH_SCAN_TYPE_SELF) {
 			ATRACE_BEGIN("populate self data");
-			ret = gti->get_channel_data_cb(gti->vendor_private_data, channel_type,
-						&ptr, &size);
-			if (ret == 0 && ptr && size)
-				goog_offload_populate_self_channel(gti, frame, i, ptr, size);
+			ret = gti->vendor_cb(gti->vendor_private_data, GTI_CMD_GET_SENSOR_DATA,
+					channel_type, &buffer, &size);
+			if (ret == 0 && buffer && size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx))
+				goog_offload_populate_self_channel(gti, frame, i, buffer, size);
 			ATRACE_END();
 		}
 
@@ -149,12 +151,26 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 
 void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
 {
-	if (gti->offload.offload_running != running)
-		gti->offload.offload_running = running;
+	if (gti->offload.offload_running != running) {
+		u32 setting = GTI_SUB_CMD_DISABLE;
 
-	/*
-	 * TODO(b/201610482): Enable/disable FW grip and palm.
-	 */
+		gti->offload.offload_running = running;
+		if (running && gti->offload.config.filter_grip)
+			setting = GTI_SUB_CMD_DISABLE;
+		else
+			setting = GTI_SUB_CMD_DRIVER_DEFAULT;
+		gti->vendor_cb(gti->vendor_private_data,
+				GTI_CMD_SET_GRIP, setting, NULL, NULL);
+		gti->grip_setting = setting;
+
+		if (running && gti->offload.config.filter_palm)
+			setting = GTI_SUB_CMD_DISABLE;
+		else
+			setting = GTI_SUB_CMD_DRIVER_DEFAULT;
+		gti->vendor_cb(gti->vendor_private_data,
+				GTI_CMD_SET_PALM, setting, NULL, NULL);
+		gti->palm_setting = setting;
+	}
 }
 
 void goog_offload_input_report(void *handle,
@@ -385,14 +401,14 @@ int goog_input_process(struct goog_touch_interface *gti)
 	 */
 	if (!gti->offload.offload_running) {
 		int ret;
-		u8 *ptr = NULL;
+		u8 *buffer = NULL;
 		u32 size = 0;
 
-		ret = gti->get_channel_data_cb(gti->vendor_private_data,
+		ret = gti->vendor_cb(gti->vendor_private_data, GTI_CMD_GET_SENSOR_DATA,
 				(TOUCH_SCAN_TYPE_MUTUAL | TOUCH_DATA_TYPE_STRENGTH),
-				&ptr, &size);
-		if (ret == 0 && ptr && size)
-			memcpy(gti->heatmap_buf, ptr, size);
+				&buffer, &size);
+		if (ret == 0 && buffer && size)
+			memcpy(gti->heatmap_buf, buffer, size);
 		goog_v4l2_read(gti, gti->timestamp);
 	}
 
@@ -421,9 +437,23 @@ void goog_input_set_timestamp(
 	/* Specific case to handle all fingers release. */
 	if (!ktime_compare(timestamp, KTIME_RELEASE_ALL)) {
 		GOOG_DBG("Enable force_legacy_report for all fingers release.\n");
+		/* Enable FW palm and grip for low power sensing during suspend. */
+		if (gti->offload.offload_running) {
+			gti->vendor_cb(gti->vendor_private_data,
+					GTI_CMD_SET_GRIP, GTI_SUB_CMD_ENABLE, NULL, NULL);
+			gti->vendor_cb(gti->vendor_private_data,
+					GTI_CMD_SET_PALM, GTI_SUB_CMD_ENABLE, NULL, NULL);
+		}
 		timestamp = ktime_get();
 		gti->force_legacy_report = true;
 	} else {
+		/* Once device is from suspend to resume, recover last grip/palm state. */
+		if (gti->offload.offload_running && gti->force_legacy_report) {
+			gti->vendor_cb(gti->vendor_private_data,
+					GTI_CMD_SET_GRIP, gti->grip_setting, NULL, NULL);
+			gti->vendor_cb(gti->vendor_private_data,
+					GTI_CMD_SET_PALM, gti->palm_setting, NULL, NULL);
+		}
 		GOOG_DBG("Disable force_legacy_report as usual state.\n");
 		gti->force_legacy_report = false;
 	}
@@ -515,7 +545,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		void *vendor_private_data,
 		struct device *dev,
 		struct input_dev *input_dev,
-		int (*get_data_cb)(void *, u32, u8 **, u32 *))
+		int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size))
 {
 	struct goog_touch_interface *gti =
 		devm_kzalloc(dev, sizeof(struct goog_touch_interface), GFP_KERNEL);
@@ -524,7 +554,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->vendor_private_data = vendor_private_data;
 		gti->dev = dev;
 		gti->input_dev = input_dev;
-		gti->get_channel_data_cb = get_data_cb;
+		gti->vendor_cb = vendor_cb;
 		mutex_init(&gti->input_lock);
 		goog_offload_probe(gti);
 	}

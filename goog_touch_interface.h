@@ -23,6 +23,47 @@
 
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
 
+
+enum {
+	/*
+	 * GTI_CMD_GET_SENSOR_DATA:
+	 *   specific sub_cmd: compose of TOUCH_DATA_TYPE_* and TOUCH_SCAN_TYPE_*.
+	 *   buffer: the address of buffer.
+	 *   size: the size of buffer.
+	 */
+	GTI_CMD_GET_SENSOR_DATA,
+
+	/*
+	 * GTI_CMD_SET_GRIP:
+	 *   common sub_cmd: GTI_SUB_CMD_*.
+	 *   buffer: N/A.
+	 *   size: N/A.
+	 */
+	GTI_CMD_SET_GRIP,
+
+	/*
+	 * GTI_CMD_SET_PALM:
+	 *   common sub_cmd: GTI_SUB_CMD_*.
+	 *   buffer: N/A.
+	 *   size: N/A.
+	 */
+	GTI_CMD_SET_PALM,
+
+	/*
+	 * GTI_CMD_SET_CONTINUOUS_REPORT:
+	 *   common sub_cmd: GTI_SUB_CMD_*.
+	 *   buffer: N/A.
+	 *   size: N/A.
+	 */
+	GTI_CMD_SET_CONTINUOUS_REPORT,
+};
+
+enum {
+	GTI_SUB_CMD_DISABLE = 0,
+	GTI_SUB_CMD_ENABLE,
+	GTI_SUB_CMD_DRIVER_DEFAULT,
+};
+
 /**
  * struct goog_touch_interfac - Google touch interface data for Pixel.
  * @vendor_private_data: the private data pointer that used by touch vendor driver.
@@ -33,15 +74,17 @@
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
  * @timestamp: irq timestamp from touch vendor driver.
+ * @grip_setting: current grip setting.
+ * @palm_setting: current palm setting.
  * @force_legacy_report: force to directly report input by kernel input API.
- * @offload_enable: touch offload is running.
- * @v4l2_enable: v4l2 is running.
+ * @offload_enable: touch offload is enabled or not.
+ * @v4l2_enable: v4l2 is enabled or not.
  * @coord_changed: coords was changed and wait to push frame into touch offload.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
  * @slot: slot id that current used by input report.
- * @get_channel_data_cb: touch vendor driver function callback to get channel data.
+ * @vendor_cb: touch vendor driver function callback.
  */
 
 struct goog_touch_interface {
@@ -53,6 +96,9 @@ struct goog_touch_interface {
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
 	ktime_t timestamp;
+
+	u32 grip_setting;
+	u32 palm_setting;
 
 	bool force_legacy_report;
 	bool offload_enable;
@@ -66,8 +112,8 @@ struct goog_touch_interface {
 	u32 heatmap_buf_size;
 	int slot;
 
-	int (*get_channel_data_cb)(void *vendor_private_data,
-				u32 data_type, u8 **ptr, u32 *size);
+	int (*vendor_cb)(void *vendor_private_data,
+				u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size);
 };
 
 
@@ -96,7 +142,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		void *vendor_private_data,
 		struct device *dev,
 		struct input_dev *input_dev,
-		int (*get_data_cb)(void *, u32, u8 **, u32 *));
+		int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size));
 int goog_touch_interface_remove(struct goog_touch_interface *gti);
 
 #endif // _GOOG_TOUCH_INTERFACE_
