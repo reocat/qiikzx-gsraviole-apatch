@@ -23,7 +23,6 @@
 
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
 
-
 enum {
 	/*
 	 * GTI_CMD_GET_SENSOR_DATA:
@@ -65,6 +64,34 @@ enum {
 };
 
 /**
+ * Motion filter finite state machine (FSM) state.
+ *   GTI_MF_STATE_FILTERED: default coordinate filtering
+ *   GTI_MF_STATE_UNFILTERED: coordinate unfiltering for single-touch.
+ *   GTI_MF_STATE_FILTERED_LOCKED: filtered coordinates. Locked until
+ *                                 touch is lifted or timeout.
+ */
+enum {
+	GTI_MF_STATE_FILTERED = 0,
+	GTI_MF_STATE_UNFILTERED,
+	GTI_MF_STATE_FILTERED_LOCKED,
+};
+
+/**
+ * Motion filter mode.
+ *   GTI_MF_MODE_UNFILTER: enable unfilter by continuous reporting.
+ *   GTI_MF_MODE_DYNAMIC: dynamic control for motion filter.
+ *   GTI_MF_MODE_FILTER: only report touch if coord report changed.
+ *   GTI_MF_MODE_AUTO: for development case.
+ */
+enum {
+	GTI_MF_MODE_UNFILTER = 0,
+	GTI_MF_MODE_DEFAULT,
+	GTI_MF_MODE_DYNAMIC = GTI_MF_MODE_DEFAULT,
+	GTI_MF_MODE_FILTER,
+	GTI_MF_MODE_AUTO_REPORT,
+};
+
+/**
  * struct goog_touch_interfac - Google touch interface data for Pixel.
  * @vendor_private_data: the private data pointer that used by touch vendor driver.
  * @dev: pointer to struct device that used by touch vendor driver.
@@ -74,8 +101,11 @@ enum {
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
  * @timestamp: irq timestamp from touch vendor driver.
+ * @mf_downtime: timestamp for motion filter control.
  * @grip_setting: current grip setting.
  * @palm_setting: current palm setting.
+ * @mf_mode: current motion filter mode.
+ * @mf_state: current motion filter state.
  * @force_legacy_report: force to directly report input by kernel input API.
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
@@ -84,6 +114,7 @@ enum {
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
  * @slot: slot id that current used by input report.
+ * @active_slot_bit: bitmap of active slot from legacy report.
  * @vendor_cb: touch vendor driver function callback.
  */
 
@@ -96,9 +127,12 @@ struct goog_touch_interface {
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
 	ktime_t timestamp;
+	ktime_t mf_downtime;
 
 	u32 grip_setting;
 	u32 palm_setting;
+	u32 mf_mode;
+	u32 mf_state;
 
 	bool force_legacy_report;
 	bool offload_enable;
@@ -111,6 +145,7 @@ struct goog_touch_interface {
 	u8 *heatmap_buf;
 	u32 heatmap_buf_size;
 	int slot;
+	unsigned long active_slot_bit;
 
 	int (*vendor_cb)(void *vendor_private_data,
 				u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size);

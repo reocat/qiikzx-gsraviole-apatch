@@ -12,6 +12,67 @@
 #include "goog_touch_interface.h"
 #include "../../../gs-google/drivers/soc/google/vh/kernel/systrace.h"
 
+void goog_update_motion_filter(struct goog_touch_interface *gti, unsigned long slot_bit)
+{
+	const u32 mf_timeout_ms = 500;
+	unsigned long touches = hweight_long(slot_bit);
+	u32 next_state = gti->mf_state;
+
+	switch (gti->mf_mode) {
+	case GTI_MF_MODE_AUTO_REPORT:
+	case GTI_MF_MODE_UNFILTER:
+		next_state = GTI_MF_STATE_UNFILTERED;
+		break;
+	case GTI_MF_MODE_FILTER:
+		next_state = GTI_MF_STATE_FILTERED;
+		break;
+	case GTI_MF_MODE_DYNAMIC:
+	default:
+		/*
+		* Determine the next filter state. The motion filter is enabled by
+		* default and it is disabled while a single finger is touching the
+		* screen. If another finger is touched down or if a timeout expires,
+		* the motion filter is reenabled and remains enabled until all fingers
+		* are lifted.
+		*/
+		switch (next_state) {
+		case GTI_MF_STATE_FILTERED:
+			if (touches == 1) {
+				next_state = GTI_MF_STATE_UNFILTERED;
+				gti->mf_downtime = ktime_get();
+			}
+			break;
+		case GTI_MF_STATE_UNFILTERED:
+			if (touches == 0) {
+				next_state = GTI_MF_STATE_FILTERED;
+			} else if (touches > 1 ||
+					ktime_after(ktime_get(),
+					ktime_add_ms(gti->mf_downtime, mf_timeout_ms))) {
+				next_state = GTI_MF_STATE_FILTERED_LOCKED;
+			}
+			break;
+		case GTI_MF_STATE_FILTERED_LOCKED:
+			if (touches == 0)
+				next_state = GTI_MF_STATE_FILTERED;
+			break;
+		}
+		break;
+	}
+
+	/* Send command to setup continuous report. */
+	if ((next_state == GTI_MF_STATE_UNFILTERED) !=
+		(gti->mf_state == GTI_MF_STATE_UNFILTERED)) {
+		u32 enable = GTI_SUB_CMD_DISABLE;
+
+		if (next_state == GTI_MF_STATE_UNFILTERED)
+			enable = GTI_SUB_CMD_ENABLE;
+		gti->vendor_cb(gti->vendor_private_data,
+				GTI_CMD_SET_CONTINUOUS_REPORT, enable, NULL, NULL);
+	}
+
+	gti->mf_state = next_state;
+}
+
 bool goog_v4l2_read_frame_cb(struct v4l2_heatmap *v4l2)
 {
 	struct goog_touch_interface *gti = container_of(v4l2, struct goog_touch_interface, v4l2);
@@ -180,6 +241,7 @@ void goog_offload_input_report(void *handle,
 	bool touch_down = 0;
 	unsigned int tool_type = MT_TOOL_FINGER;
 	int i;
+	unsigned long active_slot_bit = 0;
 
 	ATRACE_BEGIN(__func__);
 
@@ -199,6 +261,7 @@ void goog_offload_input_report(void *handle,
 				tool_type = MT_TOOL_FINGER;
 				break;
 			}
+			__set_bit(i, &active_slot_bit);
 			input_mt_slot(gti->input_dev, i);
 			touch_down = 1;
 			input_report_key(gti->input_dev, BTN_TOUCH, touch_down);
@@ -214,6 +277,7 @@ void goog_offload_input_report(void *handle,
 			input_report_abs(gti->input_dev, ABS_MT_PRESSURE,
 				report->coords[i].pressure);
 		} else {
+			__clear_bit(i, &active_slot_bit);
 			input_mt_slot(gti->input_dev, i);
 			input_report_abs(gti->input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(gti->input_dev, MT_TOOL_FINGER, 0);
@@ -227,9 +291,7 @@ void goog_offload_input_report(void *handle,
 	if (touch_down)
 		goog_v4l2_read(gti, report->timestamp);
 
-	/*
-	 * TODO(b/201610482): Enable/disable continuous reporting.
-	 */
+	goog_update_motion_filter(gti, active_slot_bit);
 
 	ATRACE_END();
 }
@@ -399,7 +461,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 	 * Otherwise, heatmap will be handled for both offload and v4l2
 	 * during goog_offload_populate_frame().
 	 */
-	if (!gti->offload.offload_running) {
+	if (!gti->offload.offload_running && gti->v4l2_enable) {
 		int ret;
 		u8 *buffer = NULL;
 		u32 size = 0;
@@ -410,6 +472,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 		if (ret == 0 && buffer && size)
 			memcpy(gti->heatmap_buf, buffer, size);
 		goog_v4l2_read(gti, gti->timestamp);
+		goog_update_motion_filter(gti, gti->active_slot_bit);
 	}
 
 	gti->coord_changed = false;
@@ -486,10 +549,13 @@ void goog_input_mt_report_slot_state(
 		input_mt_report_slot_state(dev, tool_type, active);
 
 	if (tool_type == MT_TOOL_FINGER) {
-		if (active)
+		if (active) {
 			gti->offload.coords[gti->slot].status = COORD_STATUS_FINGER;
-		else
+			__set_bit(gti->slot, &gti->active_slot_bit);
+		} else {
 			gti->offload.coords[gti->slot].status = COORD_STATUS_INACTIVE;
+			__clear_bit(gti->slot, &gti->active_slot_bit);
+		}
 	}
 }
 EXPORT_SYMBOL(goog_input_mt_report_slot_state);
@@ -555,6 +621,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->dev = dev;
 		gti->input_dev = input_dev;
 		gti->vendor_cb = vendor_cb;
+		gti->mf_mode = GTI_MF_MODE_DEFAULT;
 		mutex_init(&gti->input_lock);
 		goog_offload_probe(gti);
 	}
