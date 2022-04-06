@@ -12,6 +12,9 @@
 #include "goog_touch_interface.h"
 #include "../../../gs-google/drivers/soc/google/vh/kernel/systrace.h"
 
+static struct class *gti_class;
+static u8 gti_dev_num;
+
 void goog_update_motion_filter(struct goog_touch_interface *gti, unsigned long slot_bit)
 {
 	const u32 mf_timeout_ms = 500;
@@ -246,7 +249,7 @@ void goog_offload_input_report(void *handle,
 	ATRACE_BEGIN(__func__);
 
 	goog_input_lock(gti);
-	input_set_timestamp(gti->input_dev, report->timestamp);
+	input_set_timestamp(gti->vendor_input_dev, report->timestamp);
 	for (i = 0; i < MAX_COORDS; i++) {
 		if (report->coords[i].status != COORD_STATUS_INACTIVE) {
 			switch (report->coords[i].status) {
@@ -262,30 +265,30 @@ void goog_offload_input_report(void *handle,
 				break;
 			}
 			__set_bit(i, &active_slot_bit);
-			input_mt_slot(gti->input_dev, i);
+			input_mt_slot(gti->vendor_input_dev, i);
 			touch_down = 1;
-			input_report_key(gti->input_dev, BTN_TOUCH, touch_down);
-			input_mt_report_slot_state(gti->input_dev, tool_type, 1);
-			input_report_abs(gti->input_dev, ABS_MT_POSITION_X,
+			input_report_key(gti->vendor_input_dev, BTN_TOUCH, touch_down);
+			input_mt_report_slot_state(gti->vendor_input_dev, tool_type, 1);
+			input_report_abs(gti->vendor_input_dev, ABS_MT_POSITION_X,
 				report->coords[i].x);
-			input_report_abs(gti->input_dev, ABS_MT_POSITION_Y,
+			input_report_abs(gti->vendor_input_dev, ABS_MT_POSITION_Y,
 				report->coords[i].y);
-			input_report_abs(gti->input_dev, ABS_MT_TOUCH_MAJOR,
+			input_report_abs(gti->vendor_input_dev, ABS_MT_TOUCH_MAJOR,
 				report->coords[i].major);
-			input_report_abs(gti->input_dev, ABS_MT_TOUCH_MINOR,
+			input_report_abs(gti->vendor_input_dev, ABS_MT_TOUCH_MINOR,
 				report->coords[i].minor);
-			input_report_abs(gti->input_dev, ABS_MT_PRESSURE,
+			input_report_abs(gti->vendor_input_dev, ABS_MT_PRESSURE,
 				report->coords[i].pressure);
 		} else {
 			__clear_bit(i, &active_slot_bit);
-			input_mt_slot(gti->input_dev, i);
-			input_report_abs(gti->input_dev, ABS_MT_PRESSURE, 0);
-			input_mt_report_slot_state(gti->input_dev, MT_TOOL_FINGER, 0);
-			input_report_abs(gti->input_dev, ABS_MT_TRACKING_ID, -1);
+			input_mt_slot(gti->vendor_input_dev, i);
+			input_report_abs(gti->vendor_input_dev, ABS_MT_PRESSURE, 0);
+			input_mt_report_slot_state(gti->vendor_input_dev, MT_TOOL_FINGER, 0);
+			input_report_abs(gti->vendor_input_dev, ABS_MT_TRACKING_ID, -1);
 		}
 	}
-	input_report_key(gti->input_dev, BTN_TOUCH, touch_down);
-	input_sync(gti->input_dev);
+	input_report_key(gti->vendor_input_dev, BTN_TOUCH, touch_down);
+	input_sync(gti->vendor_input_dev);
 	goog_input_unlock(gti);
 
 	if (touch_down)
@@ -300,7 +303,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 {
 	int ret;
 	u16 values[2];
-	struct device_node *np = gti->dev->of_node;
+	struct device_node *np = gti->vendor_dev->of_node;
 
 	if (of_property_read_u8_array(np, "goog,touch_offload_id",
 					  gti->offload_id_byte, 4)) {
@@ -374,7 +377,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload_id_byte[3], gti->offload_id, gti->offload_enable);
 
 	gti->heatmap_buf_size = gti->offload.caps.tx_size * gti->offload.caps.rx_size * sizeof(u16);
-	gti->heatmap_buf = devm_kzalloc(gti->dev, gti->heatmap_buf_size, GFP_KERNEL);
+	gti->heatmap_buf = devm_kzalloc(gti->vendor_dev, gti->heatmap_buf_size, GFP_KERNEL);
 	if (!gti->heatmap_buf) {
 		GOOG_ERR("heamap alloc failed!\n");
 		ret = -ENOMEM;
@@ -387,8 +390,8 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	 * If the ISR runs before heatmap_probe is finished, it will invoke
 	 * heatmap_read and cause NPE, since read_frame would not yet be set.
 	 */
-	gti->v4l2.parent_dev = gti->dev;
-	gti->v4l2.input_dev = gti->input_dev;
+	gti->v4l2.parent_dev = gti->vendor_dev;
+	gti->v4l2.input_dev = gti->vendor_input_dev;
 	gti->v4l2.read_frame = goog_v4l2_read_frame_cb;
 	gti->v4l2.width = gti->offload.caps.tx_size;
 	gti->v4l2.height = gti->offload.caps.rx_size;
@@ -608,7 +611,7 @@ void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev)
 EXPORT_SYMBOL(goog_input_sync);
 
 struct goog_touch_interface *goog_touch_interface_probe(
-		void *vendor_private_data,
+		void *private_data,
 		struct device *dev,
 		struct input_dev *input_dev,
 		int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size))
@@ -617,13 +620,39 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		devm_kzalloc(dev, sizeof(struct goog_touch_interface), GFP_KERNEL);
 
 	if (gti) {
-		gti->vendor_private_data = vendor_private_data;
-		gti->dev = dev;
-		gti->input_dev = input_dev;
+		gti->vendor_private_data = private_data;
+		gti->vendor_dev = dev;
+		gti->vendor_input_dev = input_dev;
 		gti->vendor_cb = vendor_cb;
 		gti->mf_mode = GTI_MF_MODE_DEFAULT;
 		mutex_init(&gti->input_lock);
 		goog_offload_probe(gti);
+	}
+
+	if (!gti_class)
+		gti_class = class_create(THIS_MODULE, "goog_touch_interface");
+
+	if (gti && gti_class) {
+		char *name = kasprintf(GFP_KERNEL, "gti.%d", gti_dev_num);
+
+		if (name &&
+			!alloc_chrdev_region(&gti->dev_id, 0, 1, name)) {
+			gti->dev = device_create(gti_class, NULL,
+					gti->dev_id, gti, name);
+			if (gti->dev) {
+				gti_dev_num++;
+				GOOG_LOG("device create \"%s\".\n", name);
+				if (gti->vendor_dev) {
+					sysfs_create_link(&gti->dev->kobj,
+						&gti->vendor_dev->kobj, "vendor");
+				}
+				if (gti->vendor_input_dev) {
+					sysfs_create_link(&gti->dev->kobj,
+						&gti->vendor_input_dev->dev.kobj, "vendor_input");
+				}
+			}
+		}
+		kfree(name);
 	}
 
 	return gti;
@@ -632,12 +661,30 @@ EXPORT_SYMBOL(goog_touch_interface_probe);
 
 int goog_touch_interface_remove(struct goog_touch_interface *gti)
 {
+	if (!gti)
+		return -ENODEV;
+
+	if (gti->vendor_dev)
+		sysfs_remove_link(&gti->dev->kobj, "vendor");
+	if (gti->vendor_input_dev)
+		sysfs_remove_link(&gti->dev->kobj, "vendor_input");
+
+	if (gti_class) {
+		unregister_chrdev_region(gti->dev_id, 1);
+		device_destroy(gti_class, gti->dev_id);
+		gti_dev_num--;
+	}
+
 	gti->offload_enable = false;
 	gti->v4l2_enable = false;
 	goog_offload_remove(gti);
 	heatmap_remove(&gti->v4l2);
-	devm_kfree(gti->dev, gti->heatmap_buf);
-	devm_kfree(gti->dev, gti);
+	devm_kfree(gti->vendor_dev, gti->heatmap_buf);
+	devm_kfree(gti->vendor_dev, gti);
+
+	if (gti_class && !gti_dev_num)
+		class_destroy(gti_class);
+
 	return 0;
 }
 EXPORT_SYMBOL(goog_touch_interface_remove);

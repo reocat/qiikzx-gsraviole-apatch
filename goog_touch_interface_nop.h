@@ -12,7 +12,7 @@
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
 
 struct goog_touch_interface {
-	void *vendor_private_data;
+	void *private_data;
 };
 
 static inline void goog_input_lock(struct goog_touch_interface *gti)
@@ -69,7 +69,7 @@ static inline int goog_input_process(struct goog_touch_interface *gti)
 }
 
 static inline struct goog_touch_interface *goog_touch_interface_probe(
-	void *vendor_private_data,
+	void *private_data,
 	struct device *dev,
 	struct input_dev *input_dev,
 	int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size))

@@ -94,8 +94,9 @@ enum {
 /**
  * struct goog_touch_interfac - Google touch interface data for Pixel.
  * @vendor_private_data: the private data pointer that used by touch vendor driver.
- * @dev: pointer to struct device that used by touch vendor driver.
- * @input_dev: poiner to struct inpu_dev that used by touch vendor driver.
+ * @vendor_dev: pointer to struct device that used by touch vendor driver.
+ * @vendor_input_dev: poiner to struct inpu_dev that used by touch vendor driver.
+ * @dev: pointer to struct device that used by google touch interface driver.
  * @input_lock: protect the input report between non-offload and offload.
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
@@ -115,13 +116,15 @@ enum {
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
  * @slot: slot id that current used by input report.
  * @active_slot_bit: bitmap of active slot from legacy report.
+ * @dev_id: dev_t used for google interface driver.
  * @vendor_cb: touch vendor driver function callback.
  */
 
 struct goog_touch_interface {
 	void *vendor_private_data;
+	struct device *vendor_dev;
+	struct input_dev *vendor_input_dev;
 	struct device *dev;
-	struct input_dev *input_dev;
 	struct mutex input_lock;
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
@@ -146,8 +149,9 @@ struct goog_touch_interface {
 	u32 heatmap_buf_size;
 	int slot;
 	unsigned long active_slot_bit;
+	dev_t dev_id;
 
-	int (*vendor_cb)(void *vendor_private_data,
+	int (*vendor_cb)(void *private_data,
 				u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size);
 };
 
@@ -174,7 +178,7 @@ inline void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *
 
 int goog_input_process(struct goog_touch_interface *gti);
 struct goog_touch_interface *goog_touch_interface_probe(
-		void *vendor_private_data,
+		void *private_data,
 		struct device *dev,
 		struct input_dev *input_dev,
 		int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size));
