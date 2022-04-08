@@ -101,7 +101,7 @@ enum {
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
- * @timestamp: irq timestamp from touch vendor driver.
+ * @input_timestamp: input timestamp from touch vendor driver.
  * @mf_downtime: timestamp for motion filter control.
  * @grip_setting: current grip setting.
  * @palm_setting: current palm setting.
@@ -111,6 +111,7 @@ enum {
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
  * @coord_changed: coords was changed and wait to push frame into touch offload.
+ * @input_timestamp_changed: input timestamp changed from touch vendor driver.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
@@ -129,7 +130,7 @@ struct goog_touch_interface {
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
-	ktime_t timestamp;
+	ktime_t input_timestamp;
 	ktime_t mf_downtime;
 
 	u32 grip_setting;
@@ -141,6 +142,7 @@ struct goog_touch_interface {
 	bool offload_enable;
 	bool v4l2_enable;
 	bool coord_changed;
+	bool input_timestamp_changed;
 	union {
 	u8 offload_id_byte[4];
 	u32 offload_id;

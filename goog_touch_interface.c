@@ -234,7 +234,7 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	u16 rx = gti->offload.caps.rx_size;
 
 	frame->header.index = index++;
-	frame->header.timestamp = gti->timestamp;
+	frame->header.timestamp = gti->input_timestamp;
 
 	ATRACE_BEGIN(__func__);
 
@@ -544,10 +544,11 @@ int goog_input_process(struct goog_touch_interface *gti)
 				&buffer, &size);
 		if (ret == 0 && buffer && size)
 			memcpy(gti->heatmap_buf, buffer, size);
-		goog_v4l2_read(gti, gti->timestamp);
+		goog_v4l2_read(gti, gti->input_timestamp);
 		goog_update_motion_filter(gti, gti->active_slot_bit);
 	}
 
+	gti->input_timestamp_changed = false;
 	gti->coord_changed = false;
 
 	return ret;
@@ -596,7 +597,9 @@ void goog_input_set_timestamp(
 
 	if (goog_input_legacy_report(gti))
 		input_set_timestamp(dev, timestamp);
-	gti->timestamp = timestamp;
+
+	gti->input_timestamp = timestamp;
+	gti->input_timestamp_changed = true;
 }
 EXPORT_SYMBOL(goog_input_set_timestamp);
 
@@ -609,6 +612,12 @@ void goog_input_mt_slot(
 
 	if (slot < MAX_COORDS) {
 		gti->slot = slot;
+		/*
+		 * Make sure the input timestamp should be set before updating 1st mt_slot.
+		 * This is for input report switch between offload and legacy.
+		 */
+		if (!gti->coord_changed && !gti->input_timestamp_changed)
+			GOOG_ERR("please exec goog_input_set_timestamp before %s!\n", __func__);
 		gti->coord_changed = true;
 	}
 }
