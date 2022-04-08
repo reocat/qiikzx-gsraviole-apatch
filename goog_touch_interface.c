@@ -15,6 +15,76 @@
 static struct class *gti_class;
 static u8 gti_dev_num;
 
+static ssize_t offload_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t offload_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t v4l2_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t v4l2_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static DEVICE_ATTR_RW(offload_enable);
+static DEVICE_ATTR_RW(v4l2_enable);
+
+static struct attribute *goog_attributes[] = {
+	&dev_attr_offload_enable.attr,
+	&dev_attr_v4l2_enable.attr,
+	NULL,
+};
+
+static struct attribute_group goog_attr_group = {
+	.attrs = goog_attributes,
+};
+
+static ssize_t offload_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+
+	if (kstrtobool(buf, &gti->offload_enable))
+		GOOG_ERR("invalid input!\n");
+	else
+		GOOG_LOG("offload_enable= %d.\n", gti->offload_enable);
+	return size;
+}
+
+static ssize_t offload_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t size = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+
+	size += scnprintf(buf, PAGE_SIZE, "offload_enable= %d.\n",
+			gti->offload_enable);
+	GOOG_LOG("%s", buf);
+	return size;
+}
+
+static ssize_t v4l2_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+
+	if (kstrtobool(buf, &gti->v4l2_enable))
+		GOOG_ERR("invalid input!\n");
+	else
+		GOOG_LOG("v4l2_enable= %d.\n", gti->v4l2_enable);
+	return size;
+}
+
+static ssize_t v4l2_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	size_t size = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+
+	size += scnprintf(buf, PAGE_SIZE, "v4l2_enable= %d.\n",
+			gti->v4l2_enable);
+	GOOG_LOG("%s", buf);
+	return size;
+}
+
 void goog_update_motion_filter(struct goog_touch_interface *gti, unsigned long slot_bit)
 {
 	const u32 mf_timeout_ms = 500;
@@ -653,6 +723,14 @@ struct goog_touch_interface *goog_touch_interface_probe(
 			}
 		}
 		kfree(name);
+	}
+
+	if (gti && gti->dev) {
+		int ret;
+
+		ret = sysfs_create_group(&gti->dev->kobj, &goog_attr_group);
+		if (ret)
+			GOOG_ERR("sysfs_create_group() failed, ret= %d!\n", ret);
 	}
 
 	return gti;
