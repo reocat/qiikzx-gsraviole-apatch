@@ -8,6 +8,10 @@
 #ifndef _GOOG_TOUCH_INTERFACE_
 #define _GOOG_TOUCH_INTERFACE_
 
+#include <drm/drm_panel.h>
+#include <drm/drm_bridge.h>
+#include <drm/drm_connector.h>
+
 #include "heatmap.h"
 #include "touch_offload.h"
 #include "uapi/input/touch_offload.h"
@@ -55,12 +59,34 @@ enum {
 	 *   size: N/A.
 	 */
 	GTI_CMD_SET_CONTINUOUS_REPORT,
+
+	/*
+	 * GTI_CMD_NOTIFY_DISPLAY_STATE:
+	 *   specific sub_cmd: GTI_SUB_CMD_DISPLAY_STATE_*.
+	 *   buffer: N/A.
+	 *   size: N/A.
+	 */
+	GTI_CMD_NOTIFY_DISPLAY_STATE,
+
+	/*
+	 * GTI_CMD_NOTIFY_DISPLAY_VREFRESH:
+	 *   specific sub_cmd: display vrefresh in Hz.
+	 *   buffer: N/A.
+	 *   size: N/A.
+	 */
+	GTI_CMD_NOTIFY_DISPLAY_VREFRESH,
+
 };
 
 enum {
 	GTI_SUB_CMD_DISABLE = 0,
 	GTI_SUB_CMD_ENABLE,
 	GTI_SUB_CMD_DRIVER_DEFAULT,
+};
+
+enum {
+	GTI_SUB_CMD_DISPLAY_STATE_OFF = 0,
+	GTI_SUB_CMD_DISPLAY_STATE_ON,
 };
 
 /**
@@ -101,12 +127,16 @@ enum {
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
+ * @panel_bridge: struct that used to register panel bridge notification.
+ * @connector: struct that used to get panel status.
  * @input_timestamp: input timestamp from touch vendor driver.
  * @mf_downtime: timestamp for motion filter control.
+ * @display_vrefresh: display vrefresh in Hz.
  * @grip_setting: current grip setting.
  * @palm_setting: current palm setting.
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
+ * @panel_is_lp_mode: display is in low power mode.
  * @force_legacy_report: force to directly report input by kernel input API.
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
@@ -130,14 +160,18 @@ struct goog_touch_interface {
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
+	struct drm_bridge panel_bridge;
+	struct drm_connector *connector;
 	ktime_t input_timestamp;
 	ktime_t mf_downtime;
 
+	int display_vrefresh;
 	u32 grip_setting;
 	u32 palm_setting;
 	u32 mf_mode;
 	u32 mf_state;
 
+	bool panel_is_lp_mode;
 	bool force_legacy_report;
 	bool offload_enable;
 	bool v4l2_enable;

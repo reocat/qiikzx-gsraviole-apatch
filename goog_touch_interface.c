@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/input/mt.h>
 #include <linux/of.h>
+#include <samsung/exynos_drm_connector.h>
 
 #include "goog_touch_interface.h"
 #include "../../../gs-google/drivers/soc/google/vh/kernel/systrace.h"
@@ -83,6 +84,142 @@ static ssize_t v4l2_enable_show(struct device *dev,
 			gti->v4l2_enable);
 	GOOG_LOG("%s", buf);
 	return size;
+}
+
+static void panel_bridge_enable(struct drm_bridge *bridge)
+{
+	struct goog_touch_interface *gti =
+		container_of(bridge, struct goog_touch_interface, panel_bridge);
+
+	if (gti->panel_is_lp_mode) {
+		GOOG_LOG("skip screen-on because of panel_is_lp_mode enabled!\n");
+	} else {
+		GOOG_LOG("screen-on.\n");
+		gti->vendor_cb(gti->vendor_private_data,
+			GTI_CMD_NOTIFY_DISPLAY_STATE, GTI_SUB_CMD_DISPLAY_STATE_ON, NULL, NULL);
+	}
+}
+
+static void panel_bridge_disable(struct drm_bridge *bridge)
+{
+	struct goog_touch_interface *gti =
+		container_of(bridge, struct goog_touch_interface, panel_bridge);
+
+	if (bridge->encoder && bridge->encoder->crtc) {
+		const struct drm_crtc_state *crtc_state = bridge->encoder->crtc->state;
+
+		if (drm_atomic_crtc_effectively_active(crtc_state))
+			return;
+	}
+
+	GOOG_LOG("screen-off.\n");
+	gti->vendor_cb(gti->vendor_private_data,
+		GTI_CMD_NOTIFY_DISPLAY_STATE, GTI_SUB_CMD_DISPLAY_STATE_OFF, NULL, NULL);
+}
+
+struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
+{
+	struct drm_connector *connector;
+	struct drm_connector_list_iter conn_iter;
+
+	drm_connector_list_iter_begin(bridge->dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
+		if (connector->encoder == bridge->encoder)
+			break;
+	}
+	drm_connector_list_iter_end(&conn_iter);
+	return connector;
+}
+
+static bool panel_bridge_is_lp_mode(struct drm_connector *connector)
+{
+	if (connector && connector->state) {
+		struct exynos_drm_connector_state *s =
+			to_exynos_connector_state(connector->state);
+
+		return s->exynos_mode.is_lp_mode;
+	}
+	return false;
+}
+
+static void panel_bridge_mode_set(struct drm_bridge *bridge,
+				  const struct drm_display_mode *mode,
+				  const struct drm_display_mode *adjusted_mode)
+{
+	bool panel_is_lp_mode;
+	struct goog_touch_interface *gti =
+		container_of(bridge, struct goog_touch_interface, panel_bridge);
+
+	if (!gti->connector || !gti->connector->state)
+		gti->connector = get_bridge_connector(bridge);
+
+	panel_is_lp_mode = panel_bridge_is_lp_mode(gti->connector);
+	if (gti->panel_is_lp_mode != panel_is_lp_mode) {
+		u32 sub_cmd;
+
+		GOOG_LOG("panel_is_lp_mode changed from %d to %d.\n",
+			gti->panel_is_lp_mode, panel_is_lp_mode);
+		if (panel_is_lp_mode)
+			sub_cmd = GTI_SUB_CMD_DISPLAY_STATE_OFF;
+		else
+			sub_cmd = GTI_SUB_CMD_DISPLAY_STATE_ON;
+		gti->vendor_cb(gti->vendor_private_data,
+			GTI_CMD_NOTIFY_DISPLAY_STATE, sub_cmd, NULL, NULL);
+	}
+	gti->panel_is_lp_mode = panel_is_lp_mode;
+
+	if (adjusted_mode) {
+		int vrefresh = drm_mode_vrefresh(adjusted_mode);
+
+		if (gti->display_vrefresh != vrefresh) {
+			GOOG_DBG("display_vrefresh(Hz) changed to %d from %d.\n",
+				vrefresh, gti->display_vrefresh);
+			gti->display_vrefresh = vrefresh;
+			gti->vendor_cb(gti->vendor_private_data,
+				GTI_CMD_NOTIFY_DISPLAY_VREFRESH, (u32)vrefresh, NULL, NULL);
+		}
+	}
+}
+
+static const struct drm_bridge_funcs panel_bridge_funcs = {
+	.enable = panel_bridge_enable,
+	.disable = panel_bridge_disable,
+	.mode_set = panel_bridge_mode_set,
+};
+
+static int register_panel_bridge(struct goog_touch_interface *gti)
+{
+	GOOG_LOG("\n");
+#ifdef CONFIG_OF
+	gti->panel_bridge.of_node = gti->vendor_dev->of_node;
+#endif
+	gti->panel_bridge.funcs = &panel_bridge_funcs;
+	drm_bridge_add(&gti->panel_bridge);
+
+	return 0;
+}
+
+static void unregister_panel_bridge(struct drm_bridge *bridge)
+{
+	struct drm_bridge *node;
+
+	GOOG_LOG("\n");
+	drm_bridge_remove(bridge);
+
+	if (!bridge->dev) /* not attached */
+		return;
+
+	drm_modeset_lock(&bridge->dev->mode_config.connection_mutex, NULL);
+	list_for_each_entry(node, &bridge->encoder->bridge_chain, chain_node) {
+		if (node == bridge) {
+			if (bridge->funcs->detach)
+				bridge->funcs->detach(bridge);
+			list_del(&bridge->chain_node);
+			break;
+		}
+	}
+	drm_modeset_unlock(&bridge->dev->mode_config.connection_mutex);
+	bridge->dev = NULL;
 }
 
 void goog_update_motion_filter(struct goog_touch_interface *gti, unsigned long slot_bit)
@@ -706,6 +843,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->mf_mode = GTI_MF_MODE_DEFAULT;
 		mutex_init(&gti->input_lock);
 		goog_offload_probe(gti);
+		register_panel_bridge(gti);
 	}
 
 	if (!gti_class)
@@ -751,6 +889,7 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	if (!gti)
 		return -ENODEV;
 
+	unregister_panel_bridge(&gti->panel_bridge);
 	if (gti->vendor_dev)
 		sysfs_remove_link(&gti->dev->kobj, "vendor");
 	if (gti->vendor_input_dev)
