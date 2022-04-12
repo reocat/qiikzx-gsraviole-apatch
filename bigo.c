@@ -35,6 +35,7 @@
 #define DEFAULT_HEIGHT 2160
 #define DEFAULT_FPS 60
 #define BIGO_SMC_ID 0xd
+#define BIGO_MAX_INST_NUM 16
 
 static int bigo_worker_thread(void *data);
 
@@ -119,11 +120,28 @@ static inline void on_last_inst_close(struct bigo_core *core)
 		pr_err("failed to stop worker thread rc = %d\n", rc);
 }
 
+static inline int bigo_count_inst(struct bigo_core *core)
+{
+	int count = 0;
+	struct list_head *pos;
+
+	list_for_each(pos, &core->instances)
+		count++;
+
+	return count;
+}
+
 static int bigo_open(struct inode *inode, struct file *file)
 {
 	int rc = 0;
 	struct bigo_core *core = container_of(inode->i_cdev, struct bigo_core, cdev);
 	struct bigo_inst *inst;
+
+	if (bigo_count_inst(core) >= BIGO_MAX_INST_NUM) {
+		rc = -ENOMEM;
+		pr_err("Reaches max number of supported instances\n");
+		goto err;
+	}
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst) {
