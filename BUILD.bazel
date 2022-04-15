@@ -30,12 +30,23 @@ filegroup(
 
 kernel_module(
     name = "common.slider",
+    srcs = glob([
+        "**/*.c",
+        "**/*.h",
+        "Kbuild",
+    ]) + [
+        "//private/google-modules/soc/gs:gs101_soc_headers",
+    ],
     outs = [
         "heatmap.ko",
         "touch_bus_negotiator.ko",
         "touch_offload.ko",
+        "goog_touch_interface.ko",
     ],
     kernel_build = "//private/google-modules/soc/gs:slider",
+    kernel_module_deps = [
+        "//private/google-modules/soc/gs:gs101_soc",
+    ],
     visibility = [
         "//private/google-modules/touch:__subpackages__",
         "//private/google-modules/soc/gs:__pkg__",
