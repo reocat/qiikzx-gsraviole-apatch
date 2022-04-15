@@ -12,6 +12,13 @@
 #include "touch_offload.h"
 #include "uapi/input/touch_offload.h"
 
+#if IS_ENABLED(CONFIG_VH_SYSTRACE)
+#include <trace/hooks/systrace.h>
+#else
+#define ATRACE_BEGIN(f)
+#define ATRACE_END()
+#endif
+
 #define GOOG_LOG_NAME "GTI"
 #define GOOG_DBG(fmt, args...)    pr_debug("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)

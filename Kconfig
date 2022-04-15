@@ -34,7 +34,6 @@ config GOOG_TOUCH_INTERFACE
 	tristate "Google Touch Interface (GTI)"
 	depends on TOUCHSCREEN_OFFLOAD
 	depends on TOUCHSCREEN_HEATMAP
-	depends on VH_SYSTRACE
 	help
 	  Say Y here if you want to enable the Google Touch Interface driver.
 

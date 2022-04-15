@@ -10,7 +10,6 @@
 #include <linux/of.h>
 
 #include "goog_touch_interface.h"
-#include <trace/hooks/systrace.h>
 
 bool goog_v4l2_read_frame_cb(struct v4l2_heatmap *v4l2)
 {
