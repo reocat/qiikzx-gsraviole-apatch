@@ -226,6 +226,7 @@ static int bigo_run_job(struct bigo_core *core, struct bigo_job *job)
 	long ret = 0;
 	int rc = 0;
 	u32 status = 0;
+	unsigned long flags;
 
 	bigo_bypass_ssmt_pid(core);
 	bigo_push_regs(core, job->regs);
@@ -234,6 +235,11 @@ static int bigo_run_job(struct bigo_core *core, struct bigo_job *job)
 			msecs_to_jiffies(JOB_COMPLETE_TIMEOUT_MS));
 	if (!ret) {
 		pr_err("timed out waiting for HW\n");
+
+		spin_lock_irqsave(&core->status_lock, flags);
+		core->stat_with_irq = bigo_core_readl(core, BIGO_REG_STAT);
+		spin_unlock_irqrestore(&core->status_lock, flags);
+
 		bigo_core_disable(core);
 		rc = -ETIMEDOUT;
 	} else {
