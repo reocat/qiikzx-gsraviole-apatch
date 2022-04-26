@@ -132,12 +132,6 @@ static int bigo_open(struct inode *inode, struct file *file)
 	struct bigo_core *core = container_of(inode->i_cdev, struct bigo_core, cdev);
 	struct bigo_inst *inst;
 
-	if (bigo_count_inst(core) >= BIGO_MAX_INST_NUM) {
-		rc = -ENOMEM;
-		pr_err("Reaches max number of supported instances\n");
-		goto err;
-	}
-
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst) {
 		rc = -ENOMEM;
@@ -162,6 +156,12 @@ static int bigo_open(struct inode *inode, struct file *file)
 		goto err_first_inst;
 	}
 	mutex_lock(&core->lock);
+	if (bigo_count_inst(core) >= BIGO_MAX_INST_NUM) {
+		rc = -ENOMEM;
+		pr_err("Reaches max number of supported instances\n");
+		mutex_unlock(&core->lock);
+		goto err_inst_open;
+	}
 	if (list_empty(&core->instances)) {
 		rc = on_first_instance_open(core);
 		if (rc) {
