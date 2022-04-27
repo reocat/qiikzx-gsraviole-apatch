@@ -168,8 +168,8 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 	}
 	gti->panel_is_lp_mode = panel_is_lp_mode;
 
-	if (adjusted_mode) {
-		int vrefresh = drm_mode_vrefresh(adjusted_mode);
+	if (mode) {
+		int vrefresh = drm_mode_vrefresh(mode);
 
 		if (gti->display_vrefresh != vrefresh) {
 			GOOG_DBG("display_vrefresh(Hz) changed to %d from %d.\n",
