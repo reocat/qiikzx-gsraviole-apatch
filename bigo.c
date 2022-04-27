@@ -108,16 +108,11 @@ exit:
 
 static inline void on_last_inst_close(struct bigo_core *core)
 {
-	int rc;
 #if IS_ENABLED(CONFIG_PM)
 	if (pm_runtime_put_sync_suspend(core->dev))
 		pr_warn("failed to suspend\n");
 #endif
 	bigo_pt_client_disable(core);
-
-	rc = kthread_stop(core->worker_thread);
-	if(rc)
-		pr_err("failed to stop worker thread rc = %d\n", rc);
 }
 
 static inline int bigo_count_inst(struct bigo_core *core)
@@ -199,13 +194,8 @@ static void bigo_close(struct kref *ref)
 		return;
 	}
 	bigo_unmap_all(inst);
-	mutex_lock(&core->lock);
-	list_del(&inst->list);
 	kfree(inst->job.regs);
 	kfree(inst);
-	if (list_empty(&core->instances))
-		on_last_inst_close(core);
-	mutex_unlock(&core->lock);
 	bigo_update_qos(core);
 	pr_info("closed instance\n");
 }
@@ -213,9 +203,19 @@ static void bigo_close(struct kref *ref)
 static int bigo_release(struct inode *inode, struct file *file)
 {
 	struct bigo_inst *inst = file->private_data;
+	struct bigo_core *core = inst->core;
 
-	if (!inst)
+	if (!inst || !core)
 		return -EINVAL;
+
+	mutex_lock(&core->lock);
+	list_del(&inst->list);
+	if (list_empty(&core->instances))
+	{
+		kthread_stop(core->worker_thread);
+		on_last_inst_close(core);
+	}
+	mutex_unlock(&core->lock);
 
 	kref_put(&inst->refcount, bigo_close);
 	return 0;
