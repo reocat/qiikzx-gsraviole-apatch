@@ -725,6 +725,8 @@ int touch_offload_cleanup(struct touch_offload_context *context)
 
 	unregister_chrdev(context->major_num, context->device_name);
 
+	complete_all(&context->reserve_returned);
+
 	touch_offload_free_buffers(context);
 
 	return 0;
