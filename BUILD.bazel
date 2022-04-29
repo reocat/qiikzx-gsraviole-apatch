@@ -36,6 +36,8 @@ kernel_module(
         "Kbuild",
     ]) + [
         "//private/google-modules/soc/gs:gs101_soc_headers",
+        "//private/google-modules/display:headers",
+        "//private/google-modules/display/include:headers",
     ],
     outs = [
         "heatmap.ko",
