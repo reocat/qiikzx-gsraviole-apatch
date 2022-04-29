@@ -831,6 +831,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		struct input_dev *input_dev,
 		int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size))
 {
+	int ret;
 	struct goog_touch_interface *gti =
 		devm_kzalloc(dev, sizeof(struct goog_touch_interface), GFP_KERNEL);
 
@@ -859,12 +860,17 @@ struct goog_touch_interface *goog_touch_interface_probe(
 				gti_dev_num++;
 				GOOG_LOG("device create \"%s\".\n", name);
 				if (gti->vendor_dev) {
-					sysfs_create_link(&gti->dev->kobj,
+					ret = sysfs_create_link(&gti->dev->kobj,
 						&gti->vendor_dev->kobj, "vendor");
+					if (ret)
+						GOOG_ERR("sysfs_create_link() failed for vendor, ret=%d!\n", ret);
 				}
 				if (gti->vendor_input_dev) {
-					sysfs_create_link(&gti->dev->kobj,
+					ret = sysfs_create_link(&gti->dev->kobj,
 						&gti->vendor_input_dev->dev.kobj, "vendor_input");
+					if (ret)
+						GOOG_ERR("sysfs_create_link() failed for vendor_input, ret=%d!\n",
+							 ret);
 				}
 			}
 		}
@@ -872,8 +878,6 @@ struct goog_touch_interface *goog_touch_interface_probe(
 	}
 
 	if (gti && gti->dev) {
-		int ret;
-
 		ret = sysfs_create_group(&gti->dev->kobj, &goog_attr_group);
 		if (ret)
 			GOOG_ERR("sysfs_create_group() failed, ret= %d!\n", ret);
