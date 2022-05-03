@@ -136,10 +136,12 @@ enum {
  * @palm_setting: current palm setting.
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
+ * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
  * @panel_is_lp_mode: display is in low power mode.
  * @force_legacy_report: force to directly report input by kernel input API.
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
+ * @tbn_enable: tbn is enabled or not.
  * @coord_changed: coords was changed and wait to push frame into touch offload.
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
  * @offload_id: id that used by touch offload.
@@ -170,11 +172,13 @@ struct goog_touch_interface {
 	u32 palm_setting;
 	u32 mf_mode;
 	u32 mf_state;
+	u32 tbn_register_mask;
 
 	bool panel_is_lp_mode;
 	bool force_legacy_report;
 	bool offload_enable;
 	bool v4l2_enable;
+	bool tbn_enable;
 	bool coord_changed;
 	bool input_timestamp_changed;
 	union {

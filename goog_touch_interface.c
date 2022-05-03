@@ -11,6 +11,7 @@
 #include <samsung/exynos_drm_connector.h>
 
 #include "goog_touch_interface.h"
+#include "touch_bus_negotiator.h"
 #include "../../../gs-google/drivers/soc/google/vh/kernel/systrace.h"
 
 static struct class *gti_class;
@@ -94,6 +95,9 @@ static void panel_bridge_enable(struct drm_bridge *bridge)
 	if (gti->panel_is_lp_mode) {
 		GOOG_LOG("skip screen-on because of panel_is_lp_mode enabled!\n");
 	} else {
+		if (gti->tbn_register_mask)
+			tbn_request_bus(gti->tbn_register_mask);
+
 		GOOG_LOG("screen-on.\n");
 		gti->vendor_cb(gti->vendor_private_data,
 			GTI_CMD_NOTIFY_DISPLAY_STATE, GTI_SUB_CMD_DISPLAY_STATE_ON, NULL, NULL);
@@ -115,6 +119,9 @@ static void panel_bridge_disable(struct drm_bridge *bridge)
 	GOOG_LOG("screen-off.\n");
 	gti->vendor_cb(gti->vendor_private_data,
 		GTI_CMD_NOTIFY_DISPLAY_STATE, GTI_SUB_CMD_DISPLAY_STATE_OFF, NULL, NULL);
+
+	if (gti->tbn_register_mask)
+		tbn_release_bus(gti->tbn_register_mask);
 }
 
 struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
@@ -826,6 +833,21 @@ void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev)
 }
 EXPORT_SYMBOL(goog_input_sync);
 
+void goog_register_tbn(struct goog_touch_interface *gti)
+{
+	struct device_node *np = gti->vendor_dev->of_node;
+
+	gti->tbn_enable = of_property_read_bool(np, "goog,tbn-enable");
+	if (gti->tbn_enable) {
+		if (register_tbn(&gti->tbn_register_mask)) {
+			GOOG_ERR("failed to register tbn context!\n");
+			gti->tbn_enable = false;
+		} else {
+			GOOG_LOG("tbn_register_mask = %#x.\n", gti->tbn_register_mask);
+		}
+	}
+}
+
 struct goog_touch_interface *goog_touch_interface_probe(
 		void *private_data,
 		struct device *dev,
@@ -844,6 +866,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		mutex_init(&gti->input_lock);
 		goog_offload_probe(gti);
 		register_panel_bridge(gti);
+		goog_register_tbn(gti);
 	}
 
 	if (!gti_class)
@@ -889,7 +912,12 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	if (!gti)
 		return -ENODEV;
 
+
+	if (gti->tbn_enable && gti->tbn_register_mask)
+		unregister_tbn(&gti->tbn_register_mask);
+
 	unregister_panel_bridge(&gti->panel_bridge);
+
 	if (gti->vendor_dev)
 		sysfs_remove_link(&gti->dev->kobj, "vendor");
 	if (gti->vendor_input_dev)
