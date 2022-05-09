@@ -11,6 +11,14 @@
 
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
 
+enum gti_cmd_type : u32{
+	GTI_CMD_NOP,
+};
+
+struct gti_union_cmd_data {
+	u32 nop_cmd;
+};
+
 struct goog_touch_interface {
 	void *private_data;
 };
@@ -68,11 +76,17 @@ static inline int goog_input_process(struct goog_touch_interface *gti)
 	return 0;
 }
 
+struct gti_optional_configuration {
+	u32 reserve;
+};
+
 static inline struct goog_touch_interface *goog_touch_interface_probe(
 	void *private_data,
 	struct device *dev,
 	struct input_dev *input_dev,
-	int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size))
+	int (*default_handler)(void *private_data,
+		enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd),
+	struct gti_optional_configuration *options)
 {
 	static struct goog_touch_interface gti[1];
 

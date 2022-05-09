@@ -21,73 +21,13 @@
 					__func__, ##args)
 #define GOOG_LOG(fmt, args...)    pr_info("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)
+#define GOOG_WARN(fmt, args...)    pr_warn("[%s] %s: " fmt, GOOG_LOG_NAME,\
+					__func__, ##args)
 #define GOOG_ERR(fmt, args...)    pr_err("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)
 #define MAX_COORDS 10
 
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
-
-enum {
-	/*
-	 * GTI_CMD_GET_SENSOR_DATA:
-	 *   specific sub_cmd: compose of TOUCH_DATA_TYPE_* and TOUCH_SCAN_TYPE_*.
-	 *   buffer: the address of buffer.
-	 *   size: the size of buffer.
-	 */
-	GTI_CMD_GET_SENSOR_DATA,
-
-	/*
-	 * GTI_CMD_SET_GRIP:
-	 *   common sub_cmd: GTI_SUB_CMD_*.
-	 *   buffer: N/A.
-	 *   size: N/A.
-	 */
-	GTI_CMD_SET_GRIP,
-
-	/*
-	 * GTI_CMD_SET_PALM:
-	 *   common sub_cmd: GTI_SUB_CMD_*.
-	 *   buffer: N/A.
-	 *   size: N/A.
-	 */
-	GTI_CMD_SET_PALM,
-
-	/*
-	 * GTI_CMD_SET_CONTINUOUS_REPORT:
-	 *   common sub_cmd: GTI_SUB_CMD_*.
-	 *   buffer: N/A.
-	 *   size: N/A.
-	 */
-	GTI_CMD_SET_CONTINUOUS_REPORT,
-
-	/*
-	 * GTI_CMD_NOTIFY_DISPLAY_STATE:
-	 *   specific sub_cmd: GTI_SUB_CMD_DISPLAY_STATE_*.
-	 *   buffer: N/A.
-	 *   size: N/A.
-	 */
-	GTI_CMD_NOTIFY_DISPLAY_STATE,
-
-	/*
-	 * GTI_CMD_NOTIFY_DISPLAY_VREFRESH:
-	 *   specific sub_cmd: display vrefresh in Hz.
-	 *   buffer: N/A.
-	 *   size: N/A.
-	 */
-	GTI_CMD_NOTIFY_DISPLAY_VREFRESH,
-
-};
-
-enum {
-	GTI_SUB_CMD_DISABLE = 0,
-	GTI_SUB_CMD_ENABLE,
-	GTI_SUB_CMD_DRIVER_DEFAULT,
-};
-
-enum {
-	GTI_SUB_CMD_DISPLAY_STATE_OFF = 0,
-	GTI_SUB_CMD_DISPLAY_STATE_ON,
-};
 
 /**
  * Motion filter finite state machine (FSM) state.
@@ -117,18 +57,122 @@ enum {
 	GTI_MF_MODE_AUTO_REPORT,
 };
 
+enum gti_cmd_type : u32 {
+	GTI_CMD_GET_SENSOR_DATA,
+	GTI_CMD_SET_GRIP,
+	GTI_CMD_SET_PALM,
+	GTI_CMD_SET_CONTINUOUS_REPORT,
+	GTI_CMD_NOTIFY_DISPLAY_STATE,
+	GTI_CMD_NOTIFY_DISPLAY_VREFRESH,
+};
+
+enum gti_sensor_data_type : u32 {
+	GTI_SENSOR_DATA_TYPE_COORD = TOUCH_DATA_TYPE_COORD,
+	GTI_SENSOR_DATA_TYPE_MS = TOUCH_SCAN_TYPE_MUTUAL | TOUCH_DATA_TYPE_STRENGTH,
+	GTI_SENSOR_DATA_TYPE_SS = TOUCH_SCAN_TYPE_SELF | TOUCH_DATA_TYPE_STRENGTH,
+};
+
+enum gti_grip_setting : u32 {
+	GTI_GRIP_DISABLE = 0,
+	GTI_GRIP_ENABLE,
+	GTI_GRIP_DRIVER_DEFAULT,
+};
+
+enum gti_palm_setting : u32 {
+	GTI_PALM_DISABLE = 0,
+	GTI_PALM_ENABLE,
+	GTI_PALM_DRIVER_DEFAULT,
+};
+
+enum gti_continuous_report_setting : u32 {
+	GTI_CONTINUOUS_REPORT_DISABLE = 0,
+	GTI_CONTINUOUS_REPORT_ENABLE,
+	GTI_CONTINUOUS_REPORT_DRIVER_DEFAULT,
+};
+
+enum gti_display_state_setting : u32 {
+	GTI_DISPLAY_STATE_OFF = 0,
+	GTI_DISPLAY_STATE_ON,
+};
+
+struct gti_sensor_data_cmd {
+	enum gti_sensor_data_type type;
+	u8 *buffer;
+	u32 size;
+};
+
+struct gti_grip_cmd {
+	enum gti_grip_setting setting;
+};
+
+struct gti_palm_cmd {
+	enum gti_palm_setting setting;
+};
+
+struct gti_continuous_report_cmd {
+	enum gti_continuous_report_setting setting;
+};
+
+struct gti_display_state_cmd {
+	enum gti_display_state_setting setting;
+};
+
+struct gti_display_vrefresh_cmd {
+	u32 setting;
+};
+
+/**
+ * struct gti_union_cmd_data - GTI commands to vendor driver.
+ * @sensor_data_cmd: command to get sensor data.
+ * @grip_cmd: command to set grip.
+ * @palm_cmd: command to set palm.
+ * @continuous_report_cmd: command to set continuous reporting.
+ * @display_state_cmd: command to notify display state.
+ * @display_vrefresh_cmd: command to notify display vertical refresh rate.
+ */
+struct gti_union_cmd_data {
+	struct gti_sensor_data_cmd sensor_data_cmd;
+	struct gti_grip_cmd grip_cmd;
+	struct gti_palm_cmd palm_cmd;
+	struct gti_continuous_report_cmd continuous_report_cmd;
+	struct gti_display_state_cmd display_state_cmd;
+	struct gti_display_vrefresh_cmd display_vrefresh_cmd;
+};
+
+/**
+ * struct gti_optional_configuration - optional configuration by vendor driver.
+ * @get_mutual_sensor_data: vendor driver operation to get the mutual sensor data.
+ * @get_self_sensor_data: vendor driver operation to get the self sensor data.
+ * @set_grip: vendor driver operation to apply the grip setting.
+ * @set_palm: vendor driver operation to apply the palm setting.
+ * @set_continuous_report: vendor driver operation to apply the continuous reporting setting.
+ * @notify_display_state: vendor driver operation to notify the display state.
+ * @notify_display_vrefresh: vendor driver operation to notify the display vertical refresh rate.
+ */
+struct gti_optional_configuration {
+	int (*get_mutual_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
+	int (*get_self_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
+	int (*set_grip)(void *private_data, struct gti_grip_cmd *cmd);
+	int (*set_palm)(void *private_data, struct gti_palm_cmd *cmd);
+	int (*set_continuous_report)(void *private_data, struct gti_continuous_report_cmd *cmd);
+	int (*notify_display_state)(void *private_data, struct gti_display_state_cmd *cmd);
+	int (*notify_display_vrefresh)(void *private_data, struct gti_display_vrefresh_cmd *cmd);
+};
+
 /**
  * struct goog_touch_interfac - Google touch interface data for Pixel.
  * @vendor_private_data: the private data pointer that used by touch vendor driver.
  * @vendor_dev: pointer to struct device that used by touch vendor driver.
  * @vendor_input_dev: poiner to struct inpu_dev that used by touch vendor driver.
  * @dev: pointer to struct device that used by google touch interface driver.
+ * @options: optional configuration that could apply by vendor driver.
  * @input_lock: protect the input report between non-offload and offload.
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
  * @panel_bridge: struct that used to register panel bridge notification.
  * @connector: struct that used to get panel status.
+ * @cmd: struct that used by vendor default handler.
  * @input_timestamp: input timestamp from touch vendor driver.
  * @mf_downtime: timestamp for motion filter control.
  * @display_vrefresh: display vrefresh in Hz.
@@ -150,7 +194,7 @@ enum {
  * @slot: slot id that current used by input report.
  * @active_slot_bit: bitmap of active slot from legacy report.
  * @dev_id: dev_t used for google interface driver.
- * @vendor_cb: touch vendor driver function callback.
+ * @vendor_default_handler: touch vendor driver default operation.
  */
 
 struct goog_touch_interface {
@@ -158,12 +202,14 @@ struct goog_touch_interface {
 	struct device *vendor_dev;
 	struct input_dev *vendor_input_dev;
 	struct device *dev;
+	struct gti_optional_configuration options;
 	struct mutex input_lock;
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
 	struct drm_bridge panel_bridge;
 	struct drm_connector *connector;
+	struct gti_union_cmd_data cmd;
 	ktime_t input_timestamp;
 	ktime_t mf_downtime;
 
@@ -191,10 +237,9 @@ struct goog_touch_interface {
 	unsigned long active_slot_bit;
 	dev_t dev_id;
 
-	int (*vendor_cb)(void *private_data,
-				u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size);
+	int (*vendor_default_handler)(void *private_data,
+		enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd);
 };
-
 
 inline bool goog_input_legacy_report(struct goog_touch_interface *gti);
 inline void goog_input_lock(struct goog_touch_interface *gti);
@@ -216,12 +261,15 @@ inline void goog_input_report_key(
 		struct input_dev *dev, unsigned int code, int value);
 inline void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev);
 
+int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type);
 int goog_input_process(struct goog_touch_interface *gti);
 struct goog_touch_interface *goog_touch_interface_probe(
 		void *private_data,
 		struct device *dev,
 		struct input_dev *input_dev,
-		int (*vendor_cb)(void *private_data, u32 cmd, u32 sub_cmd, u8 **buffer, u32 *size));
+		int (*default_handler)(void *private_data,
+			enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd),
+		struct gti_optional_configuration *options);
 int goog_touch_interface_remove(struct goog_touch_interface *gti);
 
 #endif // _GOOG_TOUCH_INTERFACE_
