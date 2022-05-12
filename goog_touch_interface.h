@@ -36,7 +36,7 @@
  *   GTI_MF_STATE_FILTERED_LOCKED: filtered coordinates. Locked until
  *                                 touch is lifted or timeout.
  */
-enum {
+enum gti_mf_state : u32 {
 	GTI_MF_STATE_FILTERED = 0,
 	GTI_MF_STATE_UNFILTERED,
 	GTI_MF_STATE_FILTERED_LOCKED,
@@ -49,7 +49,7 @@ enum {
  *   GTI_MF_MODE_FILTER: only report touch if coord report changed.
  *   GTI_MF_MODE_AUTO: for development case.
  */
-enum {
+enum gti_mf_mode : u32 {
 	GTI_MF_MODE_UNFILTER = 0,
 	GTI_MF_MODE_DEFAULT,
 	GTI_MF_MODE_DYNAMIC = GTI_MF_MODE_DEFAULT,
@@ -93,6 +93,16 @@ enum gti_continuous_report_setting : u32 {
 enum gti_display_state_setting : u32 {
 	GTI_DISPLAY_STATE_OFF = 0,
 	GTI_DISPLAY_STATE_ON,
+};
+
+enum gti_vendor_dev_pm_state : u32 {
+	GTI_VENDOR_DEV_RESUME = 0,
+	GTI_VENDOR_DEV_SUSPEND,
+};
+
+enum gti_pm_state : u32 {
+	GTI_RESUME = 0,
+	GTI_SUSPEND,
 };
 
 struct gti_sensor_data_cmd {
@@ -180,6 +190,8 @@ struct gti_optional_configuration {
  * @palm_setting: current palm setting.
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
+ * @vendor_dev_pm_state: vendor device pm state.
+ * @pm_state: GTI device pm state.
  * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
  * @panel_is_lp_mode: display is in low power mode.
  * @force_legacy_report: force to directly report input by kernel input API.
@@ -214,10 +226,12 @@ struct goog_touch_interface {
 	ktime_t mf_downtime;
 
 	int display_vrefresh;
-	u32 grip_setting;
-	u32 palm_setting;
-	u32 mf_mode;
-	u32 mf_state;
+	enum gti_grip_setting grip_setting;
+	enum gti_palm_setting palm_setting;
+	enum gti_mf_mode mf_mode;
+	enum gti_mf_state mf_state;
+	enum gti_vendor_dev_pm_state vendor_dev_pm_state;
+	enum gti_pm_state pm_state;
 	u32 tbn_register_mask;
 
 	bool panel_is_lp_mode;
@@ -261,6 +275,9 @@ inline void goog_input_report_key(
 		struct input_dev *dev, unsigned int code, int value);
 inline void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev);
 
+void goog_notify_vendor_dev_pm_state_done(
+		struct goog_touch_interface *gti,
+		enum gti_vendor_dev_pm_state state);
 int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type);
 int goog_input_process(struct goog_touch_interface *gti);
 struct goog_touch_interface *goog_touch_interface_probe(

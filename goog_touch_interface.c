@@ -95,16 +95,28 @@ static void panel_bridge_enable(struct drm_bridge *bridge)
 
 	if (gti->panel_is_lp_mode) {
 		GOOG_LOG("skip screen-on because of panel_is_lp_mode enabled!\n");
-	} else {
-		if (gti->tbn_register_mask)
-			tbn_request_bus(gti->tbn_register_mask);
-
-		GOOG_LOG("screen-on.\n");
-		gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
-		ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-		if (ret)
-			GOOG_WARN("unexpected return(%d)!", ret);
+		return;
 	}
+
+	GOOG_LOG("screen-on.\n");
+	if (gti->pm_state == GTI_RESUME) {
+		GOOG_WARN("GTI already resumed!\n");
+		return;
+	}
+	if (gti->vendor_dev_pm_state == GTI_VENDOR_DEV_RESUME) {
+		GOOG_WARN("unexpected vendor_dev_pm_state(%d)!\n",
+			gti->vendor_dev_pm_state);
+	}
+	if (gti->tbn_register_mask) {
+		ret = tbn_request_bus(gti->tbn_register_mask);
+		if (ret)
+			GOOG_ERR("tbn_request_bus failed, ret %d!\n", ret);
+	}
+	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
+	if (ret)
+		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
+	gti->pm_state = GTI_RESUME;
 }
 
 static void panel_bridge_disable(struct drm_bridge *bridge)
@@ -121,13 +133,17 @@ static void panel_bridge_disable(struct drm_bridge *bridge)
 	}
 
 	GOOG_LOG("screen-off.\n");
+	if (gti->pm_state == GTI_SUSPEND) {
+		GOOG_WARN("GTI already suspended!\n");
+		return;
+	}
+	if (gti->vendor_dev_pm_state == GTI_VENDOR_DEV_SUSPEND)
+		GOOG_WARN("unexpected vendor_dev_pm_state(%d)!\n", gti->vendor_dev_pm_state);
 	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
 	if (ret)
-		GOOG_WARN("unexpected return(%d)!", ret);
-
-	if (gti->tbn_register_mask)
-		tbn_release_bus(gti->tbn_register_mask);
+		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
+	gti->pm_state = GTI_SUSPEND;
 }
 
 struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
@@ -995,6 +1011,28 @@ void goog_init_options(struct goog_touch_interface *gti,
 		}
 	}
 }
+
+void goog_notify_vendor_dev_pm_state_done(struct goog_touch_interface *gti,
+		enum gti_vendor_dev_pm_state state)
+{
+	int ret = 0;
+
+	if (!gti)
+		return;
+
+	if (gti->vendor_dev_pm_state != state) {
+		GOOG_LOG("pm state changed: %d -> %d.\n",
+			gti->vendor_dev_pm_state, state);
+		gti->vendor_dev_pm_state = state;
+	}
+	if (gti->tbn_register_mask &&
+		gti->vendor_dev_pm_state == GTI_VENDOR_DEV_SUSPEND) {
+		ret = tbn_release_bus(gti->tbn_register_mask);
+		if (ret)
+			GOOG_ERR("tbn_release_bus failed, ret %d!\n", ret);
+	}
+}
+EXPORT_SYMBOL(goog_notify_vendor_dev_pm_state_done);
 
 struct goog_touch_interface *goog_touch_interface_probe(
 		void *private_data,
