@@ -17,6 +17,10 @@
 static struct class *gti_class;
 static u8 gti_dev_num;
 
+static ssize_t mf_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t mf_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t offload_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t offload_enable_show(struct device *dev,
@@ -26,10 +30,12 @@ static ssize_t v4l2_enable_store(struct device *dev,
 static ssize_t v4l2_enable_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
+static DEVICE_ATTR_RW(mf_mode);
 static DEVICE_ATTR_RW(offload_enable);
 static DEVICE_ATTR_RW(v4l2_enable);
 
 static struct attribute *goog_attributes[] = {
+	&dev_attr_mf_mode.attr,
 	&dev_attr_offload_enable.attr,
 	&dev_attr_v4l2_enable.attr,
 	NULL,
@@ -38,6 +44,39 @@ static struct attribute *goog_attributes[] = {
 static struct attribute_group goog_attr_group = {
 	.attrs = goog_attributes,
 };
+
+static ssize_t mf_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "result: %d\n", gti->mf_mode);
+}
+
+static ssize_t mf_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	enum gti_mf_mode mode = 0;
+
+	if (buf == NULL || size < 0) {
+		GOOG_ERR("invalid input!\n");
+		return -EINVAL;
+	}
+
+	if (kstrtou32(buf, 10, &mode)) {
+		GOOG_ERR("invalid input!\n");
+		return -EINVAL;
+	}
+
+	if (mode < GTI_MF_MODE_UNFILTER ||
+		mode > GTI_MF_MODE_AUTO_REPORT) {
+		GOOG_ERR("invalid input!\n");
+		return -EINVAL;
+	}
+
+	gti->mf_mode = mode;
+	return size;
+}
 
 static ssize_t offload_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
