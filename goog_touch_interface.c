@@ -638,11 +638,20 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 			&gti->offload.caps.bus_speed_hz))
 		gti->offload.caps.bus_speed_hz = 0;
 
-	gti->offload.caps.touch_data_types =
-		TOUCH_DATA_TYPE_COORD | TOUCH_DATA_TYPE_STRENGTH |
-		TOUCH_DATA_TYPE_RAW | TOUCH_DATA_TYPE_BASELINE;
-	gti->offload.caps.touch_scan_types =
-		TOUCH_SCAN_TYPE_MUTUAL;
+	if (of_property_read_u16(np, "goog,offload-caps-data-types",
+			&gti->offload.caps.touch_data_types)) {
+		gti->offload.caps.touch_data_types =
+			TOUCH_DATA_TYPE_COORD | TOUCH_DATA_TYPE_STRENGTH |
+			TOUCH_DATA_TYPE_RAW | TOUCH_DATA_TYPE_BASELINE;
+	}
+	if (of_property_read_u16(np, "goog,offload-caps-scan-types",
+			&gti->offload.caps.touch_scan_types)) {
+		gti->offload.caps.touch_scan_types =
+			TOUCH_SCAN_TYPE_MUTUAL;
+	}
+	GOOG_LOG("offload.caps: data_types %#x, scan_types %#x.\n",
+		gti->offload.caps.touch_data_types,
+		gti->offload.caps.touch_scan_types);
 
 	gti->offload.caps.continuous_reporting = true;
 	gti->offload.caps.noise_reporting = false;
@@ -661,7 +670,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	}
 
 	gti->offload_enable = of_property_read_bool(np, "goog,offload-enable");
-	GOOG_LOG("offload configucation: %d * %d (%d * %d)\n",
+	GOOG_LOG("offload.caps: display W/H: %d * %d (Tx/Rx: %d * %d).\n",
 		gti->offload.caps.display_width, gti->offload.caps.display_height,
 		gti->offload.caps.tx_size, gti->offload.caps.rx_size);
 
