@@ -126,6 +126,125 @@ static ssize_t v4l2_enable_show(struct device *dev,
 	return size;
 }
 
+#ifdef GTI_DEBUG_KFIFO_LEN
+inline void gti_debug_input_push(struct goog_touch_interface *gti, int slot)
+{
+	struct gti_debug_input fifo;
+
+	if (slot < MAX_SLOTS) {
+		/*
+		 * Use kfifo as circular buffer by skipping one element
+		 * when fifo is full.
+		 */
+		if (kfifo_is_full(&gti->debug_fifo))
+			kfifo_skip(&gti->debug_fifo);
+
+		memcpy(&fifo, &gti->debug_input[slot], sizeof(struct gti_debug_input));
+		kfifo_in(&gti->debug_fifo, &fifo, 1);
+	}
+}
+
+inline void gti_debug_input_pop(struct goog_touch_interface *gti,
+	struct gti_debug_input *fifo, unsigned int len)
+{
+	if (len > GTI_DEBUG_KFIFO_LEN)
+		GOOG_ERR("invalid fifo pop len(%d)!\n", len);
+	/*
+	 * Keep coords without pop-out to support different timing
+	 * print-out by each caller.
+	 */
+	kfifo_out_peek(&gti->debug_fifo, fifo, len);
+}
+
+inline void gti_debug_input_update(struct goog_touch_interface *gti)
+{
+	int slot;
+	ktime_t time = ktime_get();
+
+	for_each_set_bit(slot, &gti->slot_bit_changed, MAX_SLOTS) {
+		if (test_bit(slot, &gti->slot_bit_active)) {
+			gti->debug_input[slot].pressed.time = time;
+			memcpy(&gti->debug_input[slot].pressed.coord,
+				&gti->offload.coords[slot],
+				sizeof(struct TouchOffloadCoord));
+		} else {
+			gti->released_count++;
+			gti->debug_input[slot].released.time = time;
+			memcpy(&gti->debug_input[slot].released.coord,
+				&gti->offload.coords[slot],
+				sizeof(struct TouchOffloadCoord));
+			gti_debug_input_push(gti, slot);
+		}
+	}
+	gti->slot_bit_changed = 0;
+}
+
+void gti_debug_input_dump(struct goog_touch_interface *gti)
+{
+	int i, slot, count;
+	s64 delta;
+	s64 sec_delta_down;
+	u32 ms_delta_down;
+	s64 sec_delta_duration;
+	u32 ms_delta_duration;
+	s32 px_delta_x, px_delta_y;
+	ktime_t current_time = ktime_get();
+	struct gti_debug_input last_fifo[GTI_DEBUG_KFIFO_LEN] = { 0 };
+
+	count = min(gti->released_count, ARRAY_SIZE(last_fifo));
+	gti_debug_input_pop(gti, last_fifo, count);
+	for (i = 0 ; i < count ; i++) {
+		if (last_fifo[i].slot < 0 ||
+			last_fifo[i].slot >= MAX_SLOTS) {
+			GOOG_LOG("dump: #%d: invalid slot #!\n", last_fifo[i].slot);
+			continue;
+		}
+		sec_delta_down = -1;
+		ms_delta_down = 0;
+		/*
+		 * Calculate the delta time of finger down from current time.
+		 */
+		delta = ktime_ms_delta(current_time, last_fifo[i].pressed.time);
+		if (delta > 0)
+			sec_delta_down = div_u64_rem(delta, MSEC_PER_SEC, &ms_delta_down);
+
+		/*
+		 * Calculate the delta time of finger duration from finger up to down.
+		 */
+		sec_delta_duration = -1;
+		ms_delta_duration = 0;
+		px_delta_x = 0;
+		px_delta_y = 0;
+		if (ktime_compare(last_fifo[i].released.time,
+			last_fifo[i].pressed.time) > 0) {
+			delta = ktime_ms_delta(last_fifo[i].released.time,
+					last_fifo[i].pressed.time);
+			if (delta > 0) {
+				sec_delta_duration = div_u64_rem(delta, MSEC_PER_SEC,
+									&ms_delta_duration);
+				px_delta_x = last_fifo[i].released.coord.x -
+					last_fifo[i].pressed.coord.x;
+				px_delta_y = last_fifo[i].released.coord.y -
+					last_fifo[i].pressed.coord.y;
+			}
+		}
+		GOOG_LOG("dump: #%d: %lld.%u(%lld.%u) D(%d, %d).\n",
+			last_fifo[i].slot,
+			sec_delta_down, ms_delta_down,
+			sec_delta_duration, ms_delta_duration,
+			px_delta_x, px_delta_y);
+		GOOG_DBG("dump-dbg: #%d: P(%u, %u) -> R(%u, %u).\n\n",
+			last_fifo[i].slot,
+			last_fifo[i].pressed.coord.x, last_fifo[i].pressed.coord.y,
+			last_fifo[i].released.coord.x, last_fifo[i].released.coord.y);
+	}
+	/* Extra check for unexpected case. */
+	for_each_set_bit(slot, &gti->slot_bit_active, MAX_SLOTS) {
+		GOOG_LOG("slot #%d is not released after suspend!\n", slot);
+	}
+}
+#endif /* GTI_DEBUG_KFIFO_LEN */
+
 static void panel_bridge_enable(struct drm_bridge *bridge)
 {
 	int ret = 0;
@@ -437,7 +556,7 @@ void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 	dc->header.channel_type = TOUCH_DATA_TYPE_COORD;
 	dc->header.channel_size = TOUCH_OFFLOAD_FRAME_SIZE_COORD;
 
-	for (i = 0; i < MAX_COORDS; i++) {
+	for (i = 0; i < MAX_SLOTS; i++) {
 		dc->coords[i].x = gti->offload.coords[i].x;
 		dc->coords[i].y = gti->offload.coords[i].y;
 		dc->coords[i].major = gti->offload.coords[i].major;
@@ -576,13 +695,13 @@ void goog_offload_input_report(void *handle,
 	bool touch_down = 0;
 	unsigned int tool_type = MT_TOOL_FINGER;
 	int i;
-	unsigned long active_slot_bit = 0;
+	unsigned long slot_bit_active = 0;
 
 	ATRACE_BEGIN(__func__);
 
 	goog_input_lock(gti);
 	input_set_timestamp(gti->vendor_input_dev, report->timestamp);
-	for (i = 0; i < MAX_COORDS; i++) {
+	for (i = 0; i < MAX_SLOTS; i++) {
 		if (report->coords[i].status != COORD_STATUS_INACTIVE) {
 			switch (report->coords[i].status) {
 			case COORD_STATUS_EDGE:
@@ -596,7 +715,7 @@ void goog_offload_input_report(void *handle,
 				tool_type = MT_TOOL_FINGER;
 				break;
 			}
-			__set_bit(i, &active_slot_bit);
+			set_bit(i, &slot_bit_active);
 			input_mt_slot(gti->vendor_input_dev, i);
 			touch_down = 1;
 			input_report_key(gti->vendor_input_dev, BTN_TOUCH, touch_down);
@@ -612,7 +731,7 @@ void goog_offload_input_report(void *handle,
 			input_report_abs(gti->vendor_input_dev, ABS_MT_PRESSURE,
 				report->coords[i].pressure);
 		} else {
-			__clear_bit(i, &active_slot_bit);
+			clear_bit(i, &slot_bit_active);
 			input_mt_slot(gti->vendor_input_dev, i);
 			input_report_abs(gti->vendor_input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(gti->vendor_input_dev, MT_TOOL_FINGER, 0);
@@ -626,7 +745,7 @@ void goog_offload_input_report(void *handle,
 	if (touch_down)
 		goog_v4l2_read(gti, report->timestamp);
 
-	goog_update_motion_filter(gti, active_slot_bit);
+	goog_update_motion_filter(gti, slot_bit_active);
 
 	ATRACE_END();
 }
@@ -817,9 +936,10 @@ int goog_input_process(struct goog_touch_interface *gti)
 		if (ret == 0 && cmd->buffer && cmd->size)
 			memcpy(gti->heatmap_buf, cmd->buffer, cmd->size);
 		goog_v4l2_read(gti, gti->input_timestamp);
-		goog_update_motion_filter(gti, gti->active_slot_bit);
+		goog_update_motion_filter(gti, gti->slot_bit_active);
 	}
 
+	gti_debug_input_update(gti);
 	gti->input_timestamp_changed = false;
 	gti->coord_changed = false;
 
@@ -872,7 +992,8 @@ void goog_input_set_timestamp(
 			if (ret)
 				GOOG_WARN("unexpected return(%d)!", ret);
 		}
-		GOOG_DBG("Disable force_legacy_report as usual state.\n");
+		if (gti->force_legacy_report)
+			GOOG_DBG("Disable force_legacy_report as usual state.\n");
 		gti->force_legacy_report = false;
 	}
 
@@ -891,7 +1012,7 @@ void goog_input_mt_slot(
 	if (goog_input_legacy_report(gti))
 		input_mt_slot(dev, slot);
 
-	if (slot < MAX_COORDS) {
+	if (slot < MAX_SLOTS) {
 		gti->slot = slot;
 		/*
 		 * Make sure the input timestamp should be set before updating 1st mt_slot.
@@ -914,10 +1035,16 @@ void goog_input_mt_report_slot_state(
 	if (tool_type == MT_TOOL_FINGER) {
 		if (active) {
 			gti->offload.coords[gti->slot].status = COORD_STATUS_FINGER;
-			__set_bit(gti->slot, &gti->active_slot_bit);
+			if (!test_and_set_bit(gti->slot,
+					&gti->slot_bit_active)) {
+				set_bit(gti->slot, &gti->slot_bit_changed);
+			}
 		} else {
 			gti->offload.coords[gti->slot].status = COORD_STATUS_INACTIVE;
-			__clear_bit(gti->slot, &gti->active_slot_bit);
+			if (test_and_clear_bit(gti->slot,
+					&gti->slot_bit_active)) {
+				set_bit(gti->slot, &gti->slot_bit_changed);
+			}
 		}
 	}
 }
@@ -930,7 +1057,7 @@ void goog_input_report_abs(
 	if (goog_input_legacy_report(gti))
 		input_report_abs(dev, code, value);
 
-	if (gti->slot < MAX_COORDS) {
+	if (gti->slot < MAX_SLOTS) {
 		switch (code) {
 		case ABS_MT_POSITION_X:
 			gti->offload.coords[gti->slot].x = value;
@@ -1073,11 +1200,13 @@ void goog_notify_vendor_dev_pm_state_done(struct goog_touch_interface *gti,
 			gti->vendor_dev_pm_state, state);
 		gti->vendor_dev_pm_state = state;
 	}
-	if (gti->tbn_register_mask &&
-		gti->vendor_dev_pm_state == GTI_VENDOR_DEV_SUSPEND) {
-		ret = tbn_release_bus(gti->tbn_register_mask);
-		if (ret)
-			GOOG_ERR("tbn_release_bus failed, ret %d!\n", ret);
+	if (gti->vendor_dev_pm_state == GTI_VENDOR_DEV_SUSPEND) {
+		if (gti->tbn_register_mask) {
+			ret = tbn_release_bus(gti->tbn_register_mask);
+			if (ret)
+				GOOG_ERR("tbn_release_bus failed, ret %d!\n", ret);
+		}
+		gti_debug_input_dump(gti);
 	}
 }
 EXPORT_SYMBOL(goog_notify_vendor_dev_pm_state_done);
@@ -1100,6 +1229,8 @@ struct goog_touch_interface *goog_touch_interface_probe(
 
 	gti = devm_kzalloc(dev, sizeof(struct goog_touch_interface), GFP_KERNEL);
 	if (gti) {
+		int i;
+
 		gti->vendor_private_data = private_data;
 		gti->vendor_dev = dev;
 		gti->vendor_input_dev = input_dev;
@@ -1110,6 +1241,9 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		register_panel_bridge(gti);
 		goog_register_tbn(gti);
 		goog_init_options(gti, options);
+		INIT_KFIFO(gti->debug_fifo);
+		for (i = 0 ; i < MAX_SLOTS ; i++)
+			gti->debug_input[i].slot = i;
 	}
 
 	if (!gti_class)
