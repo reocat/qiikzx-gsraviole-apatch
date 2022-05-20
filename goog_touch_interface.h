@@ -11,6 +11,7 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
+#include <linux/kfifo.h>
 
 #include "heatmap.h"
 #include "touch_offload.h"
@@ -25,9 +26,10 @@
 					__func__, ##args)
 #define GOOG_ERR(fmt, args...)    pr_err("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)
-#define MAX_COORDS 10
+#define MAX_SLOTS 10
 
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
+#define GTI_DEBUG_KFIFO_LEN 4 /* must be power of 2. */
 
 /**
  * Motion filter finite state machine (FSM) state.
@@ -131,6 +133,17 @@ struct gti_display_vrefresh_cmd {
 	u32 setting;
 };
 
+struct gti_debug_coord {
+	ktime_t time;
+	struct TouchOffloadCoord coord;
+};
+
+struct gti_debug_input {
+	int slot;
+	struct gti_debug_coord pressed;
+	struct gti_debug_coord released;
+};
+
 /**
  * struct gti_union_cmd_data - GTI commands to vendor driver.
  * @sensor_data_cmd: command to get sensor data.
@@ -204,9 +217,13 @@ struct gti_optional_configuration {
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
  * @slot: slot id that current used by input report.
- * @active_slot_bit: bitmap of active slot from legacy report.
+ * @slot_bit_active: bitmap of active slot from legacy report.
+ * @slot_bit_changed: bitmap of changed slot from legacy report.
  * @dev_id: dev_t used for google interface driver.
  * @vendor_default_handler: touch vendor driver default operation.
+ * @released_count: finger up count.
+ * @debug_input: struct that used to debug input.
+ * @debug_fifo: struct that used to debug input.
  */
 
 struct goog_touch_interface {
@@ -248,11 +265,17 @@ struct goog_touch_interface {
 	u8 *heatmap_buf;
 	u32 heatmap_buf_size;
 	int slot;
-	unsigned long active_slot_bit;
+	unsigned long slot_bit_active;
+	unsigned long slot_bit_changed;
 	dev_t dev_id;
 
 	int (*vendor_default_handler)(void *private_data,
 		enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd);
+
+	/* Debug used. */
+	unsigned long released_count;
+	struct gti_debug_input debug_input[MAX_SLOTS];
+	DECLARE_KFIFO(debug_fifo, struct gti_debug_input, GTI_DEBUG_KFIFO_LEN);
 };
 
 inline bool goog_input_legacy_report(struct goog_touch_interface *gti);
