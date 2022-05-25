@@ -10,21 +10,12 @@ KBUILD_OPTIONS	+= CONFIG_TOUCHSCREEN_TBN=m
 KBUILD_OPTIONS	+= CONFIG_TOUCHSCREEN_HEATMAP=m
 KBUILD_OPTIONS	+= CONFIG_TOUCHSCREEN_OFFLOAD=m
 EXTRA_CFLAGS	+= -DDYNAMIC_DEBUG_MODULE
-EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/touch/common/include
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../gs/google-modules/touch/common/include
 
-modules clean:
+modules modules_install headers_install clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
 	$(KBUILD_OPTIONS) \
 	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
 	$(@)
 
 modules_install: headers_install
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
-	$(KBUILD_OPTIONS) \
-	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
-	$(@)
-
-headers_install:
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
-	INSTALL_HDR_PATH="${KERNEL_UAPI_HEADERS_DIR}/usr" \
-	$(@)

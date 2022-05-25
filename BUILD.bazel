@@ -6,7 +6,7 @@
 # unless you have coordinated with the team managing the Soong to Bazel
 # migration.
 
-load("//build/kleaf:kernel.bzl", "kernel_module")
+load("//build/kernel/kleaf:kernel.bzl", "kernel_module")
 
 filegroup(
     name = "headers",
@@ -14,7 +14,7 @@ filegroup(
         "**/*.h",
     ]),
     visibility = [
-        "//private/google-modules/touch:__subpackages__",
+        "//gs/google-modules/touch:__subpackages__",
     ],
 )
 
@@ -25,9 +25,9 @@ kernel_module(
         "touch_bus_negotiator.ko",
         "touch_offload.ko",
     ],
-    kernel_build = "//private/gs-google:slider",
+    kernel_build = "//gs/google-modules/soc-modules:slider",
     visibility = [
-        "//private/google-modules/touch:__subpackages__",
-        "//private/gs-google:__pkg__",
+        "//gs/google-modules/touch:__subpackages__",
+        "//gs/google-modules/soc-modules:__pkg__",
     ],
 )
