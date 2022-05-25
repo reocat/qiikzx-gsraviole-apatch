@@ -81,6 +81,12 @@ static int pack_frame(struct touch_offload_context *context,
 			channel_size =
 			    TOUCH_OFFLOAD_FRAME_SIZE_1D(context->caps.rx_size,
 							context->caps.tx_size);
+		else if (frame->channel_type[i] ==
+				CONTEXT_CHANNEL_TYPE_DRIVER_STATUS)
+			channel_size = TOUCH_OFFLOAD_FRAME_SIZE_DRIVER_STATUS;
+		else if (frame->channel_type[i] ==
+				CONTEXT_CHANNEL_TYPE_STYLUS_STATUS)
+			channel_size = TOUCH_OFFLOAD_FRAME_SIZE_STYLUS_STATUS;
 		else {
 			pr_err("%s: Invalid channel_type = 0x%08X", __func__,
 			       frame->channel_type[i]);
@@ -223,7 +229,8 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 
 	num_channels = (context->config.read_coords ? 1 : 0) +
 		       hweight_long(context->config.mutual_data_types) +
-		       hweight_long(context->config.self_data_types);
+		       hweight_long(context->config.self_data_types) +
+		       hweight_long(context->config.context_channel_types);
 	if (num_channels == 0 || num_channels > MAX_CHANNELS) {
 		pr_err("%s: Configuration enables more (%d) than %d channels!\n",
 		       __func__, num_channels, MAX_CHANNELS);
@@ -311,6 +318,44 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 				chan++;
 			}
 		}
+		for (mask = CONTEXT_CHANNEL_BIT_START;
+		     mask <= CONTEXT_CHANNEL_BIT_END;
+		     mask <<= 1) {
+			struct TouchOffloadChannelHeader *chan_header;
+
+			if (!(context->config.context_channel_types & mask))
+				continue;
+
+			frame->channel_type[chan] = mask;
+			size = 0;
+			switch (mask) {
+			case CONTEXT_CHANNEL_TYPE_DRIVER_STATUS:
+				size =
+				    TOUCH_OFFLOAD_FRAME_SIZE_DRIVER_STATUS;
+				break;
+			case CONTEXT_CHANNEL_TYPE_STYLUS_STATUS:
+				size =
+				    TOUCH_OFFLOAD_FRAME_SIZE_STYLUS_STATUS;
+				break;
+			default:
+				pr_err("%s: Invalid channel_type = 0x%08X",
+					__func__, mask);
+				goto invalid_context_channel;
+			}
+			frame->channel_data[chan] = kzalloc(size,
+							GFP_KERNEL);
+			if (frame->channel_data[chan] == NULL)
+				goto kzalloc_channel_fail;
+
+			chan_header =
+				(struct TouchOffloadChannelHeader *)
+					frame->channel_data[chan];
+			chan_header->channel_type = mask;
+			chan_header->channel_size = size;
+			frame->channel_data_size[chan] = size;
+			frame->header.frame_size += size;
+			chan++;
+		}
 
 		frame->num_channels = chan;
 		frame->header.num_channels = chan;
@@ -329,6 +374,7 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 	mutex_unlock(&context->buffer_lock);
 	return 0;
 
+invalid_context_channel:
 kzalloc_channel_fail:
 	/* Free all channels of "frame" before returning */
 	if (frame)
@@ -454,7 +500,9 @@ static long touch_offload_ioctl(struct file *file, unsigned int ioctl_num,
 		    (configure.config.filter_grip &&
 		     !context->caps.filter_grip) ||
 		    (configure.config.filter_palm &&
-		     !context->caps.filter_palm)) {
+		     !context->caps.filter_palm) ||
+		    (configure.config.auto_reporting &&
+		     !context->caps.auto_reporting)) {
 			pr_err("%s: Invalid configuration enables unsupported features!\n",
 			       __func__);
 			err = -EINVAL;
@@ -473,13 +521,21 @@ static long touch_offload_ioctl(struct file *file, unsigned int ioctl_num,
 			       __func__);
 			err = -EINVAL;
 			return err;
+		} else if ((configure.config.context_channel_types &
+			    ~context->caps.context_channel_types) != 0) {
+			pr_err("%s: Invalid configuration enables unsupported context types!\n",
+			       __func__);
+			err = -EINVAL;
+			return err;
 		}
 
 		num_channels = (configure.config.read_coords ? 1 : 0) +
 			       hweight_long(
 				   configure.config.mutual_data_types) +
 			       hweight_long(
-				   configure.config.self_data_types);
+				   configure.config.self_data_types) +
+			       hweight_long(
+				   configure.config.context_channel_types);
 		if (num_channels <= 0 || num_channels > MAX_CHANNELS) {
 			pr_err("%s: Invalid configuration enables more (%d) than %d channels!\n",
 			       __func__, num_channels, MAX_CHANNELS);
@@ -619,8 +675,11 @@ int touch_offload_init(struct touch_offload_context *context)
 	init_completion(&context->reserve_returned);
 	complete_all(&context->reserve_returned);
 
+	if (!context->multiple_panels)
+		scnprintf(context->device_name, 32, "%s", DEVICE_NAME);
+
 	/* Initialize char device */
-	context->major_num = register_chrdev(0, DEVICE_NAME,
+	context->major_num = register_chrdev(0, context->device_name,
 					     &touch_offload_fops);
 	if (context->major_num < 0) {
 		pr_err("%s: register_chrdev failed with error = %u\n",
@@ -628,22 +687,22 @@ int touch_offload_init(struct touch_offload_context *context)
 		return context->major_num;
 	}
 
-	context->cls = class_create(THIS_MODULE, CLASS_NAME);
+	context->cls = class_create(THIS_MODULE, context->device_name);
 	if (IS_ERR(context->cls)) {
 		pr_err("%s: class_create failed with error = %ld.\n",
 		       __func__, PTR_ERR(context->cls));
-		unregister_chrdev(context->major_num, DEVICE_NAME);
+		unregister_chrdev(context->major_num, context->device_name);
 		return PTR_ERR(context->cls);
 	}
 
 	context->device = device_create(context->cls, NULL,
 					MKDEV(context->major_num, 0), NULL,
-					DEVICE_NAME);
+					context->device_name);
 	if (IS_ERR(context->device)) {
 		pr_err("%s: device_create failed with error = %ld.\n",
 		       __func__, PTR_ERR(context->device));
 		class_destroy(context->cls);
-		unregister_chrdev(context->major_num, DEVICE_NAME);
+		unregister_chrdev(context->major_num, context->device_name);
 		return PTR_ERR(context->device);
 	}
 
@@ -664,7 +723,9 @@ int touch_offload_cleanup(struct touch_offload_context *context)
 
 	class_destroy(context->cls);
 
-	unregister_chrdev(context->major_num, DEVICE_NAME);
+	unregister_chrdev(context->major_num, context->device_name);
+
+	complete_all(&context->reserve_returned);
 
 	touch_offload_free_buffers(context);
 

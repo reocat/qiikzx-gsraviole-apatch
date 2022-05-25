@@ -14,20 +14,43 @@ filegroup(
         "**/*.h",
     ]),
     visibility = [
-        "//gs/google-modules/touch:__subpackages__",
+        "//private/google-modules/touch:__subpackages__",
+    ],
+)
+
+filegroup(
+    name = "common.kconfig",
+    srcs = glob([
+        "Kconfig",
+    ]),
+    visibility = [
+        "//private/google-modules/soc/gs:__pkg__",
     ],
 )
 
 kernel_module(
     name = "common.slider",
+    srcs = glob([
+        "**/*.c",
+        "**/*.h",
+        "Kbuild",
+    ]) + [
+        "//private/google-modules/soc/gs:gs101_soc_headers",
+        "//private/google-modules/display:headers",
+        "//private/google-modules/display/include:headers",
+    ],
     outs = [
         "heatmap.ko",
         "touch_bus_negotiator.ko",
         "touch_offload.ko",
+        "goog_touch_interface.ko",
     ],
-    kernel_build = "//gs/google-modules/soc-modules:slider",
+    kernel_build = "//private/google-modules/soc/gs:slider",
+    kernel_module_deps = [
+        "//private/google-modules/soc/gs:gs101_soc",
+    ],
     visibility = [
-        "//gs/google-modules/touch:__subpackages__",
-        "//gs/google-modules/soc-modules:__pkg__",
+        "//private/google-modules/touch:__subpackages__",
+        "//private/google-modules/soc/gs:__pkg__",
     ],
 )
