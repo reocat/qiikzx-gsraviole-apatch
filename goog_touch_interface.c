@@ -662,29 +662,30 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	ATRACE_END();
 }
 
+void goog_update_fw_settings(struct goog_touch_interface *gti)
+{
+	if (gti->offload.offload_running && gti->offload.config.filter_grip)
+		gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
+	else
+		gti->cmd.grip_cmd.setting = GTI_GRIP_DRIVER_DEFAULT;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP);
+	if (ret)
+		GOOG_WARN("unexpected return(%d)!", ret);
+
+	if (gti->offload.offload_running && gti->offload.config.filter_palm)
+		gti->cmd.palm_cmd.setting = GTI_PALM_DISABLE;
+	else
+		gti->cmd.palm_cmd.setting = GTI_PALM_DRIVER_DEFAULT;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM);
+	if (ret)
+		GOOG_WARN("unexpected return(%d)!", ret);
+}
+
 void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
 {
-	int ret = 0;
 	if (gti->offload.offload_running != running) {
-
 		gti->offload.offload_running = running;
-		if (running && gti->offload.config.filter_grip)
-			gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
-		else
-			gti->cmd.grip_cmd.setting = GTI_GRIP_DRIVER_DEFAULT;
-		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP);
-		if (ret)
-			GOOG_WARN("unexpected return(%d)!", ret);
-		gti->grip_setting = gti->cmd.grip_cmd.setting;
-
-		if (running && gti->offload.config.filter_palm)
-			gti->cmd.palm_cmd.setting = GTI_PALM_DISABLE;
-		else
-			gti->cmd.palm_cmd.setting = GTI_PALM_DRIVER_DEFAULT;
-		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM);
-		if (ret)
-			GOOG_WARN("unexpected return(%d)!", ret);
-		gti->palm_setting = gti->cmd.palm_cmd.setting;
+		goog_update_fw_settings(gti);
 	}
 }
 
@@ -975,20 +976,15 @@ void goog_input_set_timestamp(
 		timestamp = ktime_get();
 		gti->force_legacy_report = true;
 	} else {
-		/* Once device is from suspend to resume, recover last grip/palm state. */
-		if (gti->offload.offload_running && gti->force_legacy_report) {
-			gti->cmd.grip_cmd.setting = gti->grip_setting;
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP);
-			if (ret)
-				GOOG_WARN("unexpected return(%d)!", ret);
-			gti->cmd.palm_cmd.setting = gti->palm_setting;
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM);
-			if (ret)
-				GOOG_WARN("unexpected return(%d)!", ret);
-		}
-		if (gti->force_legacy_report)
+		if (gti->force_legacy_report) {
 			GOOG_DBG("Disable force_legacy_report as usual state.\n");
-		gti->force_legacy_report = false;
+			gti->force_legacy_report = false;
+
+			/* Once device is from suspend to resume, the grip/palm state will
+			 * be reset to default. Update the grip/palm state again.
+			 */
+			goog_update_fw_settings(gti);
+		}
 	}
 
 	if (goog_input_legacy_report(gti))

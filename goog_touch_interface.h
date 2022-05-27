@@ -199,8 +199,6 @@ struct gti_optional_configuration {
  * @input_timestamp: input timestamp from touch vendor driver.
  * @mf_downtime: timestamp for motion filter control.
  * @display_vrefresh: display vrefresh in Hz.
- * @grip_setting: current grip setting.
- * @palm_setting: current palm setting.
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
  * @vendor_dev_pm_state: vendor device pm state.
@@ -243,8 +241,6 @@ struct goog_touch_interface {
 	ktime_t mf_downtime;
 
 	int display_vrefresh;
-	enum gti_grip_setting grip_setting;
-	enum gti_palm_setting palm_setting;
 	enum gti_mf_mode mf_mode;
 	enum gti_mf_state mf_state;
 	enum gti_vendor_dev_pm_state vendor_dev_pm_state;
