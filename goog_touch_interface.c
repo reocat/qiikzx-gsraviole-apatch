@@ -972,17 +972,6 @@ void goog_input_set_timestamp(
 	/* Specific case to handle all fingers release. */
 	if (!ktime_compare(timestamp, KTIME_RELEASE_ALL)) {
 		GOOG_DBG("Enable force_legacy_report for all fingers release.\n");
-		/* Enable FW palm and grip for low power sensing during suspend. */
-		if (gti->offload.offload_running) {
-			gti->cmd.grip_cmd.setting = GTI_GRIP_ENABLE;
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP);
-			if (ret)
-				GOOG_WARN("unexpected return(%d)!", ret);
-			gti->cmd.palm_cmd.setting = GTI_PALM_ENABLE;
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM);
-			if (ret)
-				GOOG_WARN("unexpected return(%d)!", ret);
-		}
 		timestamp = ktime_get();
 		gti->force_legacy_report = true;
 	} else {
