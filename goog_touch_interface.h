@@ -211,14 +211,14 @@ struct gti_optional_configuration {
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
  * @tbn_enable: tbn is enabled or not.
- * @coord_changed: coords was changed and wait to push frame into touch offload.
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
  * @slot: slot id that current used by input report.
- * @slot_bit_active: bitmap of active slot from legacy report.
- * @slot_bit_changed: bitmap of changed slot from legacy report.
+ * @slot_bit_in_use: bitmap of slot in use for this input process cycle.
+ * @slot_bit_changed: bitmap of slot state changed for this input process cycle.
+ * @slot_bit_active: bitmap of active slot during GTI lifecycle.
  * @dev_id: dev_t used for google interface driver.
  * @vendor_default_handler: touch vendor driver default operation.
  * @released_count: finger up count.
@@ -256,7 +256,6 @@ struct goog_touch_interface {
 	bool offload_enable;
 	bool v4l2_enable;
 	bool tbn_enable;
-	bool coord_changed;
 	bool input_timestamp_changed;
 	union {
 	u8 offload_id_byte[4];
@@ -265,8 +264,9 @@ struct goog_touch_interface {
 	u8 *heatmap_buf;
 	u32 heatmap_buf_size;
 	int slot;
-	unsigned long slot_bit_active;
+	unsigned long slot_bit_in_use;
 	unsigned long slot_bit_changed;
+	unsigned long slot_bit_active;
 	dev_t dev_id;
 
 	int (*vendor_default_handler)(void *private_data,

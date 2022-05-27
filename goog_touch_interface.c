@@ -893,7 +893,12 @@ int goog_input_process(struct goog_touch_interface *gti)
 	int ret = 0;
 	struct touch_offload_frame **frame = &gti->offload_frame;
 
-	if (!gti->coord_changed)
+	/*
+	 * Only do the input process if active slot(s) update
+	 * or slot(s) state change.
+	 */
+	if (!(gti->slot_bit_active & gti->slot_bit_in_use) &&
+		!gti->slot_bit_changed)
 		return -EPERM;
 
 	if (gti->offload_enable) {
@@ -941,7 +946,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 
 	gti_debug_input_update(gti);
 	gti->input_timestamp_changed = false;
-	gti->coord_changed = false;
+	gti->slot_bit_in_use = 0;
 
 	return ret;
 }
@@ -1018,9 +1023,9 @@ void goog_input_mt_slot(
 		 * Make sure the input timestamp should be set before updating 1st mt_slot.
 		 * This is for input report switch between offload and legacy.
 		 */
-		if (!gti->coord_changed && !gti->input_timestamp_changed)
+		if (!gti->slot_bit_in_use && !gti->input_timestamp_changed)
 			GOOG_ERR("please exec goog_input_set_timestamp before %s!\n", __func__);
-		gti->coord_changed = true;
+		set_bit(slot, &gti->slot_bit_in_use);
 	}
 }
 EXPORT_SYMBOL(goog_input_mt_slot);
