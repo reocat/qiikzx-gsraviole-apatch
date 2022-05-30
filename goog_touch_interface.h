@@ -61,8 +61,10 @@ enum gti_mf_mode : u32 {
 
 enum gti_cmd_type : u32 {
 	GTI_CMD_GET_SENSOR_DATA,
-	GTI_CMD_SET_GRIP,
-	GTI_CMD_SET_PALM,
+	GTI_CMD_SET_GRIP_MODE,
+	GTI_CMD_GET_GRIP_MODE,
+	GTI_CMD_SET_PALM_MODE,
+	GTI_CMD_GET_PALM_MODE,
 	GTI_CMD_SET_CONTINUOUS_REPORT,
 	GTI_CMD_NOTIFY_DISPLAY_STATE,
 	GTI_CMD_NOTIFY_DISPLAY_VREFRESH,
@@ -166,8 +168,10 @@ struct gti_union_cmd_data {
  * struct gti_optional_configuration - optional configuration by vendor driver.
  * @get_mutual_sensor_data: vendor driver operation to get the mutual sensor data.
  * @get_self_sensor_data: vendor driver operation to get the self sensor data.
- * @set_grip: vendor driver operation to apply the grip setting.
- * @set_palm: vendor driver operation to apply the palm setting.
+ * @set_grip_mode: vendor driver operation to apply the grip mode setting.
+ * @get_grip_mode: vendor driver operation to get the grip mode setting.
+ * @set_palm_mode: vendor driver operation to apply the palm mode setting.
+ * @get_palm_mode: vendor driver operation to get the palm mode setting.
  * @set_continuous_report: vendor driver operation to apply the continuous reporting setting.
  * @notify_display_state: vendor driver operation to notify the display state.
  * @notify_display_vrefresh: vendor driver operation to notify the display vertical refresh rate.
@@ -175,8 +179,10 @@ struct gti_union_cmd_data {
 struct gti_optional_configuration {
 	int (*get_mutual_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
 	int (*get_self_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
-	int (*set_grip)(void *private_data, struct gti_grip_cmd *cmd);
-	int (*set_palm)(void *private_data, struct gti_palm_cmd *cmd);
+	int (*set_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
+	int (*get_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
+	int (*set_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
+	int (*get_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
 	int (*set_continuous_report)(void *private_data, struct gti_continuous_report_cmd *cmd);
 	int (*notify_display_state)(void *private_data, struct gti_display_state_cmd *cmd);
 	int (*notify_display_vrefresh)(void *private_data, struct gti_display_vrefresh_cmd *cmd);

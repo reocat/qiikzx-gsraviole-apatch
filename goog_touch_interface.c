@@ -17,6 +17,10 @@
 static struct class *gti_class;
 static u8 gti_dev_num;
 
+static ssize_t grip_enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t grip_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t mf_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t mf_mode_show(struct device *dev,
@@ -25,18 +29,26 @@ static ssize_t offload_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t offload_enable_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
+static ssize_t palm_enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t palm_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t v4l2_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t v4l2_enable_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
+static DEVICE_ATTR_RW(grip_enabled);
 static DEVICE_ATTR_RW(mf_mode);
 static DEVICE_ATTR_RW(offload_enable);
 static DEVICE_ATTR_RW(v4l2_enable);
+static DEVICE_ATTR_RW(palm_enabled);
 
 static struct attribute *goog_attributes[] = {
+	&dev_attr_grip_enabled.attr,
 	&dev_attr_mf_mode.attr,
 	&dev_attr_offload_enable.attr,
+	&dev_attr_palm_enabled.attr,
 	&dev_attr_v4l2_enable.attr,
 	NULL,
 };
@@ -44,6 +56,50 @@ static struct attribute *goog_attributes[] = {
 static struct attribute_group goog_attr_group = {
 	.attrs = goog_attributes,
 };
+
+static ssize_t grip_enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_grip_cmd *cmd = &gti->cmd.grip_cmd;
+	bool enabled = false;
+
+	if (kstrtobool(buf, &enabled)) {
+		GOOG_ERR("invalid input!\n");
+		return -EINVAL;
+	}
+
+	GOOG_LOG("grip_enabled= %d.\n", enabled);
+
+	cmd->setting = enabled ? GTI_GRIP_ENABLE : GTI_GRIP_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
+	if (ret != 0) {
+		GOOG_ERR("Failed to %s grip mode!\n", enabled ? "enable" : "disable");
+		return -EINVAL;
+	}
+	return size;
+}
+
+static ssize_t grip_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	size_t size = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_grip_cmd *cmd = &gti->cmd.grip_cmd;
+
+	cmd->setting = GTI_GRIP_DRIVER_DEFAULT;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_GRIP_MODE);
+	if (ret == 0) {
+		size += scnprintf(buf, PAGE_SIZE, "result: %d\n",
+				cmd->setting == GTI_GRIP_ENABLE);
+	} else {
+		size += scnprintf(buf, PAGE_SIZE, "error: %d\n", ret);
+	}
+	GOOG_LOG("%s", buf);
+	return size;
+}
 
 static ssize_t mf_mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -98,6 +154,50 @@ static ssize_t offload_enable_show(struct device *dev,
 
 	size += scnprintf(buf, PAGE_SIZE, "offload_enable= %d.\n",
 			gti->offload_enable);
+	GOOG_LOG("%s", buf);
+	return size;
+}
+
+static ssize_t palm_enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_palm_cmd *cmd = &gti->cmd.palm_cmd;
+	bool enabled = false;
+
+	if (kstrtobool(buf, &enabled)) {
+		GOOG_ERR("invalid input!\n");
+		return -EINVAL;
+	}
+
+	GOOG_LOG("palm_enabled= %d.\n", enabled);
+
+	cmd->setting = enabled ? GTI_PALM_ENABLE : GTI_PALM_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
+	if (ret != 0) {
+		GOOG_ERR("Failed to %s palm mode!\n", enabled ? "enable" : "disable");
+		return -EINVAL;
+	}
+	return size;
+}
+
+static ssize_t palm_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	size_t size = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_palm_cmd *cmd = &gti->cmd.palm_cmd;
+
+	cmd->setting = GTI_PALM_DRIVER_DEFAULT;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_PALM_MODE);
+	if (ret == 0) {
+		size += scnprintf(buf, PAGE_SIZE, "result: %d\n",
+				cmd->setting == GTI_PALM_ENABLE);
+	} else {
+		size += scnprintf(buf, PAGE_SIZE, "error: %d\n", ret);
+	}
 	GOOG_LOG("%s", buf);
 	return size;
 }
@@ -428,11 +528,17 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 				private_data, &gti->cmd.sensor_data_cmd);
 		}
 		break;
-	case GTI_CMD_SET_GRIP:
-		ret = gti->options.set_grip(private_data, &gti->cmd.grip_cmd);
+	case GTI_CMD_SET_GRIP_MODE:
+		ret = gti->options.set_grip_mode(private_data, &gti->cmd.grip_cmd);
 		break;
-	case GTI_CMD_SET_PALM:
-		ret = gti->options.set_palm(private_data, &gti->cmd.palm_cmd);
+	case GTI_CMD_GET_GRIP_MODE:
+		ret = gti->options.get_grip_mode(private_data, &gti->cmd.grip_cmd);
+		break;
+	case GTI_CMD_SET_PALM_MODE:
+		ret = gti->options.set_palm_mode(private_data, &gti->cmd.palm_cmd);
+		break;
+	case GTI_CMD_GET_PALM_MODE:
+		ret = gti->options.get_palm_mode(private_data, &gti->cmd.palm_cmd);
 		break;
 	case GTI_CMD_SET_CONTINUOUS_REPORT:
 		ret = gti->options.set_continuous_report(private_data,
@@ -664,11 +770,12 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 
 void goog_update_fw_settings(struct goog_touch_interface *gti)
 {
+	int ret = 0;
 	if (gti->offload.offload_running && gti->offload.config.filter_grip)
 		gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
 	else
 		gti->cmd.grip_cmd.setting = GTI_GRIP_DRIVER_DEFAULT;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP);
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
 	if (ret)
 		GOOG_WARN("unexpected return(%d)!", ret);
 
@@ -676,7 +783,7 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 		gti->cmd.palm_cmd.setting = GTI_PALM_DISABLE;
 	else
 		gti->cmd.palm_cmd.setting = GTI_PALM_DRIVER_DEFAULT;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM);
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
 	if (ret)
 		GOOG_WARN("unexpected return(%d)!", ret);
 }
@@ -969,7 +1076,6 @@ void goog_input_set_timestamp(
 		struct goog_touch_interface *gti,
 		struct input_dev *dev, ktime_t timestamp)
 {
-	int ret = 0;
 	/* Specific case to handle all fingers release. */
 	if (!ktime_compare(timestamp, KTIME_RELEASE_ALL)) {
 		GOOG_DBG("Enable force_legacy_report for all fingers release.\n");
@@ -1114,13 +1220,25 @@ static int goog_get_self_sensor_data_nop(
 	return -ESRCH;
 }
 
-static int goog_set_grip_nop(
+static int goog_set_grip_mode_nop(
 		void *private_data, struct gti_grip_cmd *cmd)
 {
 	return -ESRCH;
 }
 
-static int goog_set_palm_nop(
+static int goog_get_grip_mode_nop(
+		void *private_data, struct gti_grip_cmd *cmd)
+{
+	return -ESRCH;
+}
+
+static int goog_set_palm_mode_nop(
+		void *private_data, struct gti_palm_cmd *cmd)
+{
+	return -ESRCH;
+}
+
+static int goog_get_palm_mode_nop(
 		void *private_data, struct gti_palm_cmd *cmd)
 {
 	return -ESRCH;
@@ -1150,8 +1268,10 @@ void goog_init_options(struct goog_touch_interface *gti,
 	/* Initialize default functions. */
 	gti->options.get_mutual_sensor_data = goog_get_mutual_sensor_data_nop;
 	gti->options.get_self_sensor_data = goog_get_self_sensor_data_nop;
-	gti->options.set_grip = goog_set_grip_nop;
-	gti->options.set_palm = goog_set_palm_nop;
+	gti->options.set_grip_mode = goog_set_grip_mode_nop;
+	gti->options.get_grip_mode = goog_get_grip_mode_nop;
+	gti->options.set_palm_mode = goog_set_palm_mode_nop;
+	gti->options.get_palm_mode = goog_get_palm_mode_nop;
 	gti->options.set_continuous_report = goog_set_continuous_report_nop;
 	gti->options.notify_display_state = goog_notify_display_state_nop;
 	gti->options.notify_display_vrefresh = goog_notify_display_vrefresh_nop;
@@ -1162,10 +1282,14 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->options.get_mutual_sensor_data = options->get_mutual_sensor_data;
 		if (options->get_self_sensor_data)
 			gti->options.get_self_sensor_data = options->get_self_sensor_data;
-		if (options->set_grip)
-			gti->options.set_grip = options->set_grip;
-		if (options->set_palm)
-			gti->options.set_palm = options->set_palm;
+		if (options->set_grip_mode)
+			gti->options.set_grip_mode = options->set_grip_mode;
+		if (options->get_grip_mode)
+			gti->options.get_grip_mode = options->get_grip_mode;
+		if (options->set_palm_mode)
+			gti->options.set_palm_mode = options->set_palm_mode;
+		if (options->get_palm_mode)
+			gti->options.get_palm_mode = options->get_palm_mode;
 		if (options->set_continuous_report)
 			gti->options.set_continuous_report = options->set_continuous_report;
 		if (options->notify_display_state)
