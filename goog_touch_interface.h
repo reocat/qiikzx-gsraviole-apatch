@@ -36,7 +36,7 @@
  */
 
 enum gti_cmd_type : u32 {
-	/* GTI_CMD opeations. */
+	/* GTI_CMD operations. */
 	GTI_CMD_OPS_START = 0x100,
 	GTI_CMD_PING,
 	GTI_CMD_RESET,
@@ -49,6 +49,7 @@ enum gti_cmd_type : u32 {
 	GTI_CMD_GET_IRQ_MODE,
 	GTI_CMD_GET_PALM_MODE,
 	GTI_CMD_GET_SCAN_MODE,
+	GTI_CMD_GET_SCREEN_PROTECTOR_MODE,
 	GTI_CMD_GET_SENSING_MODE,
 	GTI_CMD_GET_SENSOR_DATA,
 
@@ -64,6 +65,7 @@ enum gti_cmd_type : u32 {
 	GTI_CMD_SET_IRQ_MODE,
 	GTI_CMD_SET_PALM_MODE,
 	GTI_CMD_SET_SCAN_MODE,
+	GTI_CMD_SET_SCREEN_PROTECTOR_MODE,
 	GTI_CMD_SET_SENSING_MODE,
 };
 
@@ -150,6 +152,12 @@ enum gti_scan_mode : u32 {
 	GTI_SCAN_MODE_NA = 0xFFFFFFFF,
 };
 
+enum gti_screen_protector_mode : u32 {
+	GTI_SCREEN_PROTECTOR_MODE_DISABLE = 0,
+	GTI_SCREEN_PROTECTOR_MODE_ENABLE,
+	GTI_SCREEN_PROTECTOR_MODE_NA = 0xFFFFFFFF,
+};
+
 enum gti_selftest_result : u32 {
 	GTI_SELFTEST_RESULT_DONE = 0,
 	GTI_SELFTEST_RESULT_SHELL_CMDS_REDIRECT,
@@ -228,6 +236,10 @@ struct gti_scan_cmd {
 	enum gti_scan_mode setting;
 };
 
+struct gti_screen_protector_mode_cmd {
+	enum gti_screen_protector_mode setting;
+};
+
 struct gti_selftest_cmd {
 	enum gti_selftest_result result;
 	char buffer[PAGE_SIZE];
@@ -255,6 +267,7 @@ struct gti_sensor_data_cmd {
  * @ping_cmd: command to ping T-IC.
  * @reset_cmd: command to reset T-IC.
  * @scan_cmd: command to set/get scan mode.
+ * @screen_protector_mode_cmd: command to set/get screen protector mode.
  * @selftest_cmd: command to do self-test.
  * @sensing_cmd: command to set/set sensing mode.
  * @sensor_data_cmd: command to get sensor data.
@@ -270,6 +283,7 @@ struct gti_union_cmd_data {
 	struct gti_ping_cmd ping_cmd;
 	struct gti_reset_cmd reset_cmd;
 	struct gti_scan_cmd scan_cmd;
+	struct gti_screen_protector_mode_cmd screen_protector_mode_cmd;
 	struct gti_selftest_cmd selftest_cmd;
 	struct gti_sensing_cmd sensing_cmd;
 	struct gti_sensor_data_cmd sensor_data_cmd;
@@ -282,7 +296,8 @@ struct gti_union_cmd_data {
  * @get_irq_mode: vendor driver operation to get irq mode setting.
  * @get_mutual_sensor_data: vendor driver operation to get the mutual sensor data.
  * @get_palm_mode: vendor driver operation to get the palm mode setting.
- * @get_scan_mode: vendor driver opeartion to get scan mode.
+ * @get_scan_mode: vendor driver operation to get scan mode.
+ * @get_screen_protector_mode: vendor driver operation to get screen protector mode.
  * @get_self_sensor_data: vendor driver operation to get the self sensor data.
  * @get_sensing_mode: vendor driver operation to get sensing mode.
  * @notify_display_state: vendor driver operation to notify the display state.
@@ -295,6 +310,7 @@ struct gti_union_cmd_data {
  * @set_irq_mode: vendor driver operation to apply the irq setting.
  * @set_palm_mode: vendor driver operation to apply the palm setting.
  * @set_scan_mode: vendor driver operation to set scan mode.
+ * @set_screen_protector_mode: vendor driver operation to set screen protector mode.
  * @set_sensing_mode: vendor driver operation to set sensing mode.
  */
 struct gti_optional_configuration {
@@ -304,6 +320,7 @@ struct gti_optional_configuration {
 	int (*get_mutual_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
 	int (*get_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
 	int (*get_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
+	int (*get_screen_protector_mode)(void *private_data, struct gti_screen_protector_mode_cmd *cmd);
 	int (*get_self_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
 	int (*get_sensing_mode)(void *private_data, struct gti_sensing_cmd *cmd);
 	int (*notify_display_state)(void *private_data, struct gti_display_state_cmd *cmd);
@@ -316,14 +333,15 @@ struct gti_optional_configuration {
 	int (*set_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
 	int (*set_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
 	int (*set_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
+	int (*set_screen_protector_mode)(void *private_data, struct gti_screen_protector_mode_cmd *cmd);
 	int (*set_sensing_mode)(void *private_data, struct gti_sensing_cmd *cmd);
 };
 
 /**
- * struct goog_touch_interfac - Google touch interface data for Pixel.
+ * struct goog_touch_interface - Google touch interface data for Pixel.
  * @vendor_private_data: the private data pointer that used by touch vendor driver.
  * @vendor_dev: pointer to struct device that used by touch vendor driver.
- * @vendor_input_dev: poiner to struct inpu_dev that used by touch vendor driver.
+ * @vendor_input_dev: pointer to struct inpu_dev that used by touch vendor driver.
  * @dev: pointer to struct device that used by google touch interface driver.
  * @options: optional configuration that could apply by vendor driver.
  * @input_lock: protect the input report between non-offload and offload.
@@ -339,6 +357,7 @@ struct gti_optional_configuration {
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
  * @vendor_dev_pm_state: vendor device pm state.
+ * @screen_protector_mode_setting: the setting of screen protector mode.
  * @pm_state: GTI device pm state.
  * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
  * @panel_is_lp_mode: display is in low power mode.
@@ -384,6 +403,7 @@ struct goog_touch_interface {
 	enum gti_mf_state mf_state;
 	enum gti_pm_state pm_state;
 	enum gti_vendor_dev_pm_state vendor_dev_pm_state;
+	enum gti_screen_protector_mode screen_protector_mode_setting;
 	u32 tbn_register_mask;
 
 	bool panel_is_lp_mode;

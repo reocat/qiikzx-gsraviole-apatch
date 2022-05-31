@@ -52,6 +52,10 @@ static ssize_t scan_mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t scan_mode_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t screen_protector_mode_enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t screen_protector_mode_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
 static ssize_t self_test_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t sensing_enabled_show(struct device *dev,
@@ -72,6 +76,7 @@ static DEVICE_ATTR_RW(palm_enabled);
 static DEVICE_ATTR_RO(ping);
 static DEVICE_ATTR_RW(reset);
 static DEVICE_ATTR_RW(scan_mode);
+static DEVICE_ATTR_RW(screen_protector_mode_enabled);
 static DEVICE_ATTR_RO(self_test);
 static DEVICE_ATTR_RW(sensing_enabled);
 static DEVICE_ATTR_RW(v4l2_enabled);
@@ -86,6 +91,7 @@ static struct attribute *goog_attributes[] = {
 	&dev_attr_ping.attr,
 	&dev_attr_reset.attr,
 	&dev_attr_scan_mode.attr,
+	&dev_attr_screen_protector_mode_enabled.attr,
 	&dev_attr_self_test.attr,
 	&dev_attr_sensing_enabled.attr,
 	&dev_attr_v4l2_enabled.attr,
@@ -474,6 +480,52 @@ static ssize_t scan_mode_store(struct device *dev,
 	else
 		GOOG_LOG("scan_mode= %u\n", mode);
 
+	return size;
+}
+
+static ssize_t screen_protector_mode_enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_screen_protector_mode_cmd *cmd = &gti->cmd.screen_protector_mode_cmd;
+	bool enabled = false;
+
+	if (kstrtobool(buf, &enabled)) {
+		GOOG_ERR("invalid input!\n");
+		return -EINVAL;
+	}
+
+	cmd->setting = enabled ? GTI_SCREEN_PROTECTOR_MODE_ENABLE : GTI_SCREEN_PROTECTOR_MODE_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SCREEN_PROTECTOR_MODE);
+	if (ret == -EOPNOTSUPP)
+		GOOG_ERR("error: not supported!\n");
+	else if (ret)
+		GOOG_ERR("error: %d!\n", ret);
+	else
+		GOOG_LOG("enabled= %u\n", enabled);
+	gti->screen_protector_mode_setting = enabled ?
+			GTI_SCREEN_PROTECTOR_MODE_ENABLE : GTI_SCREEN_PROTECTOR_MODE_DISABLE;
+	return size;
+}
+
+static ssize_t screen_protector_mode_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	size_t size = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_screen_protector_mode_cmd *cmd = &gti->cmd.screen_protector_mode_cmd;
+
+	cmd->setting = GTI_SCREEN_PROTECTOR_MODE_NA;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SCREEN_PROTECTOR_MODE);
+	if (ret == 0) {
+		size += scnprintf(buf, PAGE_SIZE, "result: %d\n",
+				cmd->setting == GTI_SCREEN_PROTECTOR_MODE_ENABLE);
+	} else {
+		size += scnprintf(buf, PAGE_SIZE, "error: %d\n", ret);
+	}
+	GOOG_LOG("%s", buf);
 	return size;
 }
 
@@ -910,6 +962,10 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 	case GTI_CMD_GET_SCAN_MODE:
 		ret = gti->options.set_scan_mode(private_data, &gti->cmd.scan_cmd);
 		break;
+	case GTI_CMD_GET_SCREEN_PROTECTOR_MODE:
+		ret = gti->options.get_screen_protector_mode(private_data,
+				&gti->cmd.screen_protector_mode_cmd);
+		break;
 	case GTI_CMD_GET_SENSING_MODE:
 		ret = gti->options.get_sensing_mode(private_data, &gti->cmd.sensing_cmd);
 		break;
@@ -945,6 +1001,9 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 		break;
 	case GTI_CMD_SET_SCAN_MODE:
 		ret = gti->options.set_scan_mode(private_data, &gti->cmd.scan_cmd);
+		break;
+	case GTI_CMD_SET_SCREEN_PROTECTOR_MODE:
+		ret = gti->options.set_screen_protector_mode(private_data, &gti->cmd.screen_protector_mode_cmd);
 		break;
 	case GTI_CMD_SET_SENSING_MODE:
 		ret = gti->options.set_sensing_mode(private_data, &gti->cmd.sensing_cmd);
@@ -1183,6 +1242,13 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
 	if (ret)
 		GOOG_WARN("unexpected return(%d)!", ret);
+
+	gti->cmd.screen_protector_mode_cmd.setting = gti->screen_protector_mode_setting;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SCREEN_PROTECTOR_MODE);
+	if (ret != 0)
+		GOOG_ERR("Failed to %s screen protector mode!\n",
+				gti->screen_protector_mode_setting == GTI_SCREEN_PROTECTOR_MODE_ENABLE ?
+				"enable" : "disable");
 }
 
 void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
@@ -1646,6 +1712,12 @@ static int goog_get_scan_mode_nop(
 	return -ESRCH;
 }
 
+static int goog_get_screen_protector_mode_nop(
+		void *private_data, struct gti_screen_protector_mode_cmd *cmd)
+{
+	return -ESRCH;
+}
+
 static int goog_get_self_sensor_data_nop(
 		void *private_data, struct gti_sensor_data_cmd *cmd)
 {
@@ -1718,6 +1790,12 @@ static int goog_set_scan_mode_nop(
 	return -ESRCH;
 }
 
+static int goog_set_screen_protector_mode_nop(
+		void *private_data, struct gti_screen_protector_mode_cmd *cmd)
+{
+	return -ESRCH;
+}
+
 static int goog_set_sensing_mode_nop(
 		void *private_data, struct gti_sensing_cmd *cmd)
 {
@@ -1734,6 +1812,7 @@ void goog_init_options(struct goog_touch_interface *gti,
 	gti->options.get_mutual_sensor_data = goog_get_mutual_sensor_data_nop;
 	gti->options.get_palm_mode = goog_get_palm_mode_nop;
 	gti->options.get_scan_mode = goog_get_scan_mode_nop;
+	gti->options.get_screen_protector_mode = goog_get_screen_protector_mode_nop;
 	gti->options.get_self_sensor_data = goog_get_self_sensor_data_nop;
 	gti->options.get_sensing_mode = goog_get_sensing_mode_nop;
 	gti->options.notify_display_state = goog_notify_display_state_nop;
@@ -1746,6 +1825,7 @@ void goog_init_options(struct goog_touch_interface *gti,
 	gti->options.set_irq_mode = goog_set_irq_mode_nop;
 	gti->options.set_palm_mode = goog_set_palm_mode_nop;
 	gti->options.set_scan_mode = goog_set_scan_mode_nop;
+	gti->options.set_screen_protector_mode = goog_set_screen_protector_mode_nop;
 	gti->options.set_sensing_mode = goog_set_sensing_mode_nop;
 
 	/* Set optional operation if available. */
@@ -1762,6 +1842,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->options.get_palm_mode = options->get_palm_mode;
 		if (options->get_scan_mode)
 			gti->options.get_scan_mode = options->get_scan_mode;
+		if (options->get_screen_protector_mode)
+			gti->options.get_screen_protector_mode = options->get_screen_protector_mode;
 		if (options->get_self_sensor_data)
 			gti->options.get_self_sensor_data = options->get_self_sensor_data;
 		if (options->get_sensing_mode)
@@ -1788,6 +1870,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->options.set_palm_mode = options->set_palm_mode;
 		if (options->set_scan_mode)
 			gti->options.set_scan_mode = options->set_scan_mode;
+		if (options->set_screen_protector_mode)
+			gti->options.set_screen_protector_mode = options->set_screen_protector_mode;
 		if (options->set_sensing_mode)
 			gti->options.set_sensing_mode = options->set_sensing_mode;
 	}
@@ -1842,6 +1926,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->vendor_input_dev = input_dev;
 		gti->vendor_default_handler = default_handler;
 		gti->mf_mode = GTI_MF_MODE_DEFAULT;
+		gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
 		mutex_init(&gti->input_lock);
 		goog_offload_probe(gti);
 		register_panel_bridge(gti);
