@@ -31,17 +31,62 @@
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
 #define GTI_DEBUG_KFIFO_LEN 4 /* must be power of 2. */
 
-/**
- * Motion filter finite state machine (FSM) state.
- *   GTI_MF_STATE_FILTERED: default coordinate filtering
- *   GTI_MF_STATE_UNFILTERED: coordinate unfiltering for single-touch.
- *   GTI_MF_STATE_FILTERED_LOCKED: filtered coordinates. Locked until
- *                                 touch is lifted or timeout.
+/*-----------------------------------------------------------------------------
+ * enums.
  */
-enum gti_mf_state : u32 {
-	GTI_MF_STATE_FILTERED = 0,
-	GTI_MF_STATE_UNFILTERED,
-	GTI_MF_STATE_FILTERED_LOCKED,
+
+enum gti_cmd_type : u32 {
+	/* GTI_CMD opeations. */
+	GTI_CMD_OPS_START = 0x100,
+	GTI_CMD_PING,
+	GTI_CMD_RESET,
+	GTI_CMD_SELFTEST,
+
+	/* GTI_CMD_GET operations. */
+	GTI_CMD_GET_OPS_START = 0x200,
+	GTI_CMD_GET_FW_VERSION,
+	GTI_CMD_GET_GRIP_MODE,
+	GTI_CMD_GET_IRQ_MODE,
+	GTI_CMD_GET_PALM_MODE,
+	GTI_CMD_GET_SCAN_MODE,
+	GTI_CMD_GET_SENSING_MODE,
+	GTI_CMD_GET_SENSOR_DATA,
+
+	/* GTI_CMD_NOTIFY operations. */
+	GTI_CMD_NOTIFY_OPS_START = 0x300,
+	GTI_CMD_NOTIFY_DISPLAY_STATE,
+	GTI_CMD_NOTIFY_DISPLAY_VREFRESH,
+
+	/* GTI_CMD_SET operations. */
+	GTI_CMD_SET_OPS_START = 0x400,
+	GTI_CMD_SET_CONTINUOUS_REPORT,
+	GTI_CMD_SET_GRIP_MODE,
+	GTI_CMD_SET_IRQ_MODE,
+	GTI_CMD_SET_PALM_MODE,
+	GTI_CMD_SET_SCAN_MODE,
+	GTI_CMD_SET_SENSING_MODE,
+};
+
+enum gti_continuous_report_setting : u32 {
+	GTI_CONTINUOUS_REPORT_DISABLE = 0,
+	GTI_CONTINUOUS_REPORT_ENABLE,
+	GTI_CONTINUOUS_REPORT_DRIVER_DEFAULT,
+};
+
+enum gti_display_state_setting : u32 {
+	GTI_DISPLAY_STATE_OFF = 0,
+	GTI_DISPLAY_STATE_ON,
+};
+
+enum gti_grip_setting : u32 {
+	GTI_GRIP_DISABLE = 0,
+	GTI_GRIP_ENABLE,
+};
+
+enum gti_irq_mode : u32 {
+	GTI_IRQ_MODE_DISABLE = 0,
+	GTI_IRQ_MODE_ENABLE,
+	GTI_IRQ_MODE_NA = 0xFFFFFFFF,
 };
 
 /**
@@ -59,15 +104,62 @@ enum gti_mf_mode : u32 {
 	GTI_MF_MODE_AUTO_REPORT,
 };
 
-enum gti_cmd_type : u32 {
-	GTI_CMD_GET_SENSOR_DATA,
-	GTI_CMD_SET_GRIP_MODE,
-	GTI_CMD_GET_GRIP_MODE,
-	GTI_CMD_SET_PALM_MODE,
-	GTI_CMD_GET_PALM_MODE,
-	GTI_CMD_SET_CONTINUOUS_REPORT,
-	GTI_CMD_NOTIFY_DISPLAY_STATE,
-	GTI_CMD_NOTIFY_DISPLAY_VREFRESH,
+/**
+ * Motion filter finite state machine (FSM) state.
+ *   GTI_MF_STATE_FILTERED: default coordinate filtering
+ *   GTI_MF_STATE_UNFILTERED: coordinate unfiltering for single-touch.
+ *   GTI_MF_STATE_FILTERED_LOCKED: filtered coordinates. Locked until
+ *                                 touch is lifted or timeout.
+ */
+enum gti_mf_state : u32 {
+	GTI_MF_STATE_FILTERED = 0,
+	GTI_MF_STATE_UNFILTERED,
+	GTI_MF_STATE_FILTERED_LOCKED,
+};
+
+enum gti_palm_setting : u32 {
+	GTI_PALM_DISABLE = 0,
+	GTI_PALM_ENABLE,
+};
+
+enum gti_ping_mode : u32 {
+	GTI_PING_NOP = 0,
+	GTI_PING_ENABLE,
+	GTI_PING_NA = 0xFFFFFFFF,
+};
+
+enum gti_pm_state : u32 {
+	GTI_RESUME = 0,
+	GTI_SUSPEND,
+};
+
+enum gti_reset_mode : u32 {
+	GTI_RESET_MODE_NOP = 0,
+	GTI_RESET_MODE_SW = (1 << 0),
+	GTI_RESET_MODE_HW = (1 << 1),
+	GTI_RESET_MODE_AUTO = GTI_RESET_MODE_HW | GTI_RESET_MODE_SW,
+	GTI_RESET_MODE_NA = 0xFFFFFFFF,
+};
+
+enum gti_scan_mode : u32 {
+	GTI_SCAN_MODE_AUTO = 0,
+	GTI_SCAN_MODE_NORMAL_ACTIVE,
+	GTI_SCAN_MODE_NORMAL_IDLE,
+	GTI_SCAN_MODE_LP_ACTIVE,
+	GTI_SCAN_MODE_LP_IDLE,
+	GTI_SCAN_MODE_NA = 0xFFFFFFFF,
+};
+
+enum gti_selftest_result : u32 {
+	GTI_SELFTEST_RESULT_DONE = 0,
+	GTI_SELFTEST_RESULT_SHELL_CMDS_REDIRECT,
+	GTI_SELFTEST_RESULT_NA = 0xFFFFFFFF,
+};
+
+enum gti_sensing_mode : u32 {
+	GTI_SENSING_MODE_DISABLE = 0,
+	GTI_SENSING_MODE_ENABLE,
+	GTI_SENSING_MODE_NA = 0xFFFFFFFF,
 };
 
 enum gti_sensor_data_type : u32 {
@@ -76,61 +168,17 @@ enum gti_sensor_data_type : u32 {
 	GTI_SENSOR_DATA_TYPE_SS = TOUCH_SCAN_TYPE_SELF | TOUCH_DATA_TYPE_STRENGTH,
 };
 
-enum gti_grip_setting : u32 {
-	GTI_GRIP_DISABLE = 0,
-	GTI_GRIP_ENABLE,
-};
-
-enum gti_palm_setting : u32 {
-	GTI_PALM_DISABLE = 0,
-	GTI_PALM_ENABLE,
-};
-
-enum gti_continuous_report_setting : u32 {
-	GTI_CONTINUOUS_REPORT_DISABLE = 0,
-	GTI_CONTINUOUS_REPORT_ENABLE,
-	GTI_CONTINUOUS_REPORT_DRIVER_DEFAULT,
-};
-
-enum gti_display_state_setting : u32 {
-	GTI_DISPLAY_STATE_OFF = 0,
-	GTI_DISPLAY_STATE_ON,
-};
-
 enum gti_vendor_dev_pm_state : u32 {
 	GTI_VENDOR_DEV_RESUME = 0,
 	GTI_VENDOR_DEV_SUSPEND,
 };
 
-enum gti_pm_state : u32 {
-	GTI_RESUME = 0,
-	GTI_SUSPEND,
-};
-
-struct gti_sensor_data_cmd {
-	enum gti_sensor_data_type type;
-	u8 *buffer;
-	u32 size;
-};
-
-struct gti_grip_cmd {
-	enum gti_grip_setting setting;
-};
-
-struct gti_palm_cmd {
-	enum gti_palm_setting setting;
-};
+/*-----------------------------------------------------------------------------
+ * Structures.
+ */
 
 struct gti_continuous_report_cmd {
 	enum gti_continuous_report_setting setting;
-};
-
-struct gti_display_state_cmd {
-	enum gti_display_state_setting setting;
-};
-
-struct gti_display_vrefresh_cmd {
-	u32 setting;
 };
 
 struct gti_debug_coord {
@@ -144,46 +192,131 @@ struct gti_debug_input {
 	struct gti_debug_coord released;
 };
 
+struct gti_display_state_cmd {
+	enum gti_display_state_setting setting;
+};
+
+struct gti_display_vrefresh_cmd {
+	u32 setting;
+};
+
+struct gti_fw_version_cmd {
+	char buffer[0x100];
+};
+
+struct gti_grip_cmd {
+	enum gti_grip_setting setting;
+};
+
+struct gti_irq_cmd {
+	enum gti_irq_mode setting;
+};
+
+struct gti_palm_cmd {
+	enum gti_palm_setting setting;
+};
+
+struct gti_ping_cmd {
+	enum gti_ping_mode setting;
+};
+
+struct gti_reset_cmd {
+	enum gti_reset_mode setting;
+};
+
+struct gti_scan_cmd {
+	enum gti_scan_mode setting;
+};
+
+struct gti_selftest_cmd {
+	enum gti_selftest_result result;
+	char buffer[PAGE_SIZE];
+};
+
+struct gti_sensing_cmd {
+	enum gti_sensing_mode setting;
+};
+
+struct gti_sensor_data_cmd {
+	enum gti_sensor_data_type type;
+	u8 *buffer;
+	u32 size;
+};
+
 /**
  * struct gti_union_cmd_data - GTI commands to vendor driver.
- * @sensor_data_cmd: command to get sensor data.
- * @grip_cmd: command to set grip.
- * @palm_cmd: command to set palm.
  * @continuous_report_cmd: command to set continuous reporting.
  * @display_state_cmd: command to notify display state.
  * @display_vrefresh_cmd: command to notify display vertical refresh rate.
+ * @fw_version_cmd: command to get fw version.
+ * @grip_cmd: command to set/get grip mode.
+ * @irq_cmd: command to set/get irq mode.
+ * @palm_cmd: command to set/get palm mode.
+ * @ping_cmd: command to ping T-IC.
+ * @reset_cmd: command to reset T-IC.
+ * @scan_cmd: command to set/get scan mode.
+ * @selftest_cmd: command to do self-test.
+ * @sensing_cmd: command to set/set sensing mode.
+ * @sensor_data_cmd: command to get sensor data.
  */
 struct gti_union_cmd_data {
-	struct gti_sensor_data_cmd sensor_data_cmd;
-	struct gti_grip_cmd grip_cmd;
-	struct gti_palm_cmd palm_cmd;
 	struct gti_continuous_report_cmd continuous_report_cmd;
 	struct gti_display_state_cmd display_state_cmd;
 	struct gti_display_vrefresh_cmd display_vrefresh_cmd;
+	struct gti_fw_version_cmd fw_version_cmd;
+	struct gti_grip_cmd grip_cmd;
+	struct gti_irq_cmd irq_cmd;
+	struct gti_palm_cmd palm_cmd;
+	struct gti_ping_cmd ping_cmd;
+	struct gti_reset_cmd reset_cmd;
+	struct gti_scan_cmd scan_cmd;
+	struct gti_selftest_cmd selftest_cmd;
+	struct gti_sensing_cmd sensing_cmd;
+	struct gti_sensor_data_cmd sensor_data_cmd;
 };
 
 /**
  * struct gti_optional_configuration - optional configuration by vendor driver.
- * @get_mutual_sensor_data: vendor driver operation to get the mutual sensor data.
- * @get_self_sensor_data: vendor driver operation to get the self sensor data.
- * @set_grip_mode: vendor driver operation to apply the grip mode setting.
+ * @get_fw_version: vendor driver operation to get fw version info.
  * @get_grip_mode: vendor driver operation to get the grip mode setting.
- * @set_palm_mode: vendor driver operation to apply the palm mode setting.
+ * @get_irq_mode: vendor driver operation to get irq mode setting.
+ * @get_mutual_sensor_data: vendor driver operation to get the mutual sensor data.
  * @get_palm_mode: vendor driver operation to get the palm mode setting.
- * @set_continuous_report: vendor driver operation to apply the continuous reporting setting.
+ * @get_scan_mode: vendor driver opeartion to get scan mode.
+ * @get_self_sensor_data: vendor driver operation to get the self sensor data.
+ * @get_sensing_mode: vendor driver operation to get sensing mode.
  * @notify_display_state: vendor driver operation to notify the display state.
  * @notify_display_vrefresh: vendor driver operation to notify the display vertical refresh rate.
+ * @ping: vendor driver operation to ping T-IC.
+ * @reset: vendor driver operation to exec reset.
+ * @selftest: vendor driver operation to exec self-test.
+ * @set_continuous_report: vendor driver operation to apply the continuous reporting setting.
+ * @set_grip_mode: vendor driver operation to apply the grip setting.
+ * @set_irq_mode: vendor driver operation to apply the irq setting.
+ * @set_palm_mode: vendor driver operation to apply the palm setting.
+ * @set_scan_mode: vendor driver operation to set scan mode.
+ * @set_sensing_mode: vendor driver operation to set sensing mode.
  */
 struct gti_optional_configuration {
-	int (*get_mutual_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
-	int (*get_self_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
-	int (*set_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
+	int (*get_fw_version)(void *private_data, struct gti_fw_version_cmd *cmd);
 	int (*get_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
-	int (*set_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
+	int (*get_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
+	int (*get_mutual_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
 	int (*get_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
-	int (*set_continuous_report)(void *private_data, struct gti_continuous_report_cmd *cmd);
+	int (*get_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
+	int (*get_self_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
+	int (*get_sensing_mode)(void *private_data, struct gti_sensing_cmd *cmd);
 	int (*notify_display_state)(void *private_data, struct gti_display_state_cmd *cmd);
 	int (*notify_display_vrefresh)(void *private_data, struct gti_display_vrefresh_cmd *cmd);
+	int (*ping)(void *private_data, struct gti_ping_cmd *cmd);
+	int (*reset)(void *private_data, struct gti_reset_cmd *cmd);
+	int (*selftest)(void *private_data, struct gti_selftest_cmd *cmd);
+	int (*set_continuous_report)(void *private_data, struct gti_continuous_report_cmd *cmd);
+	int (*set_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
+	int (*set_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
+	int (*set_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
+	int (*set_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
+	int (*set_sensing_mode)(void *private_data, struct gti_sensing_cmd *cmd);
 };
 
 /**
@@ -214,6 +347,8 @@ struct gti_optional_configuration {
  * @v4l2_enable: v4l2 is enabled or not.
  * @tbn_enable: tbn is enabled or not.
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
+ * @default_grip_enabled: the grip default setting.
+ * @default_palm_enabled: the palm default setting.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
@@ -247,8 +382,8 @@ struct goog_touch_interface {
 	int display_vrefresh;
 	enum gti_mf_mode mf_mode;
 	enum gti_mf_state mf_state;
-	enum gti_vendor_dev_pm_state vendor_dev_pm_state;
 	enum gti_pm_state pm_state;
+	enum gti_vendor_dev_pm_state vendor_dev_pm_state;
 	u32 tbn_register_mask;
 
 	bool panel_is_lp_mode;
@@ -279,6 +414,10 @@ struct goog_touch_interface {
 	struct gti_debug_input debug_input[MAX_SLOTS];
 	DECLARE_KFIFO(debug_fifo, struct gti_debug_input, GTI_DEBUG_KFIFO_LEN);
 };
+
+/*-----------------------------------------------------------------------------
+ * Forward declarations.
+ */
 
 inline bool goog_input_legacy_report(struct goog_touch_interface *gti);
 inline void goog_input_lock(struct goog_touch_interface *gti);
