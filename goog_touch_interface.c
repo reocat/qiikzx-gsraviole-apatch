@@ -1360,6 +1360,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		register_panel_bridge(gti);
 		goog_register_tbn(gti);
 		goog_init_options(gti, options);
+		goog_update_fw_settings(gti);
 		INIT_KFIFO(gti->debug_fifo);
 		for (i = 0 ; i < MAX_SLOTS ; i++)
 			gti->debug_input[i].slot = i;
