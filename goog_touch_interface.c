@@ -89,7 +89,7 @@ static ssize_t grip_enabled_show(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 	struct gti_grip_cmd *cmd = &gti->cmd.grip_cmd;
 
-	cmd->setting = GTI_GRIP_DRIVER_DEFAULT;
+	cmd->setting = GTI_GRIP_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_GRIP_MODE);
 	if (ret == 0) {
 		size += scnprintf(buf, PAGE_SIZE, "result: %d\n",
@@ -190,7 +190,7 @@ static ssize_t palm_enabled_show(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 	struct gti_palm_cmd *cmd = &gti->cmd.palm_cmd;
 
-	cmd->setting = GTI_PALM_DRIVER_DEFAULT;
+	cmd->setting = GTI_PALM_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_PALM_MODE);
 	if (ret == 0) {
 		size += scnprintf(buf, PAGE_SIZE, "result: %d\n",
@@ -774,7 +774,7 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 	if (gti->offload.offload_running && gti->offload.config.filter_grip)
 		gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
 	else
-		gti->cmd.grip_cmd.setting = GTI_GRIP_DRIVER_DEFAULT;
+		gti->cmd.grip_cmd.setting = gti->default_grip_enabled;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
 	if (ret)
 		GOOG_WARN("unexpected return(%d)!", ret);
@@ -782,7 +782,7 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 	if (gti->offload.offload_running && gti->offload.config.filter_palm)
 		gti->cmd.palm_cmd.setting = GTI_PALM_DISABLE;
 	else
-		gti->cmd.palm_cmd.setting = GTI_PALM_DRIVER_DEFAULT;
+		gti->cmd.palm_cmd.setting = gti->default_palm_enabled;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
 	if (ret)
 		GOOG_WARN("unexpected return(%d)!", ret);
@@ -943,6 +943,11 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	GOOG_LOG("offload ID: \"%c%c%c%c\" / 0x%08X, offload_enable=%d.\n",
 		gti->offload_id_byte[0], gti->offload_id_byte[1], gti->offload_id_byte[2],
 		gti->offload_id_byte[3], gti->offload_id, gti->offload_enable);
+
+	gti->default_grip_enabled = of_property_read_bool(np,
+			"goog,default-grip-disabled") ? GTI_GRIP_DISABLE : GTI_GRIP_ENABLE;
+	gti->default_palm_enabled = of_property_read_bool(np,
+			"goog,default-palm-disabled") ? GTI_PALM_DISABLE : GTI_PALM_ENABLE;
 
 	gti->heatmap_buf_size = gti->offload.caps.tx_size * gti->offload.caps.rx_size * sizeof(u16);
 	gti->heatmap_buf = devm_kzalloc(gti->vendor_dev, gti->heatmap_buf_size, GFP_KERNEL);

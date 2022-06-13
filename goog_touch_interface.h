@@ -79,13 +79,11 @@ enum gti_sensor_data_type : u32 {
 enum gti_grip_setting : u32 {
 	GTI_GRIP_DISABLE = 0,
 	GTI_GRIP_ENABLE,
-	GTI_GRIP_DRIVER_DEFAULT,
 };
 
 enum gti_palm_setting : u32 {
 	GTI_PALM_DISABLE = 0,
 	GTI_PALM_ENABLE,
-	GTI_PALM_DRIVER_DEFAULT,
 };
 
 enum gti_continuous_report_setting : u32 {
@@ -259,6 +257,8 @@ struct goog_touch_interface {
 	bool v4l2_enable;
 	bool tbn_enable;
 	bool input_timestamp_changed;
+	bool default_grip_enabled;
+	bool default_palm_enabled;
 	union {
 	u8 offload_id_byte[4];
 	u32 offload_id;
