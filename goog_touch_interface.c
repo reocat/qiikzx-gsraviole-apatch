@@ -25,6 +25,10 @@ static void goog_offload_set_running(struct goog_touch_interface *gti, bool runn
 /*-----------------------------------------------------------------------------
  * GTI/sysfs: forward declarations, structures and functions.
  */
+static ssize_t force_active_show(
+	struct device *dev, struct device_attribute *attr, char *buf);
+static ssize_t force_active_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fw_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t grip_enabled_show(struct device *dev,
@@ -72,6 +76,7 @@ static ssize_t v4l2_enabled_show(struct device *dev,
 static ssize_t v4l2_enabled_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 
+static DEVICE_ATTR_RW(force_active);
 static DEVICE_ATTR_RO(fw_ver);
 static DEVICE_ATTR_RW(grip_enabled);
 static DEVICE_ATTR_RW(irq_enabled);
@@ -87,6 +92,7 @@ static DEVICE_ATTR_RW(sensing_enabled);
 static DEVICE_ATTR_RW(v4l2_enabled);
 
 static struct attribute *goog_attributes[] = {
+	&dev_attr_force_active.attr,
 	&dev_attr_fw_ver.attr,
 	&dev_attr_grip_enabled.attr,
 	&dev_attr_irq_enabled.attr,
@@ -106,6 +112,55 @@ static struct attribute *goog_attributes[] = {
 static struct attribute_group goog_attr_group = {
 	.attrs = goog_attributes,
 };
+
+static ssize_t force_active_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	int ret = 0;
+	bool locked = false;
+
+	locked = goog_pm_wake_check_locked(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
+	ret = snprintf(buf, PAGE_SIZE, "result: %s\n",
+		locked ? "locked" : "unlocked");
+	GOOG_LOG("%s", buf);
+
+	return ret;
+}
+
+static ssize_t force_active_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	u32 locked = 0;
+	int ret = 0;
+
+	if (buf == NULL || size < 0) {
+		GOOG_LOG("error: invalid input!\n");
+		return -EINVAL;
+	}
+
+	if (kstrtou32(buf, 10, &locked)) {
+		GOOG_LOG("error: invalid input!\n");
+		return -EINVAL;
+	}
+
+	if (locked > 1) {
+		GOOG_LOG("error: invalid input!\n");
+		return -EINVAL;
+	}
+
+	if (locked)
+		ret = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE, false);
+	else
+		ret = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
+
+	if (ret < 0) {
+		GOOG_LOG("error: %d!\n", ret);
+		return ret;
+	}
+	return size;
+}
 
 static ssize_t fw_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -782,24 +837,13 @@ static void panel_bridge_enable(struct drm_bridge *bridge)
 	}
 
 	GOOG_LOG("screen-on.\n");
-	if (gti->pm_state == GTI_RESUME) {
-		GOOG_WARN("GTI already resumed!\n");
-		return;
-	}
-	if (gti->vendor_dev_pm_state == GTI_VENDOR_DEV_RESUME) {
-		GOOG_WARN("unexpected vendor_dev_pm_state(%d)!\n",
-			gti->vendor_dev_pm_state);
-	}
-	if (gti->tbn_register_mask) {
-		ret = tbn_request_bus(gti->tbn_register_mask);
-		if (ret)
-			GOOG_ERR("tbn_request_bus failed, ret %d!\n", ret);
-	}
+
+	goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
+
 	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-	if (ret)
+	if (ret && ret != -EOPNOTSUPP)
 		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
-	gti->pm_state = GTI_RESUME;
 }
 
 static void panel_bridge_disable(struct drm_bridge *bridge)
@@ -816,17 +860,13 @@ static void panel_bridge_disable(struct drm_bridge *bridge)
 	}
 
 	GOOG_LOG("screen-off.\n");
-	if (gti->pm_state == GTI_SUSPEND) {
-		GOOG_WARN("GTI already suspended!\n");
-		return;
-	}
-	if (gti->vendor_dev_pm_state == GTI_VENDOR_DEV_SUSPEND)
-		GOOG_WARN("unexpected vendor_dev_pm_state(%d)!\n", gti->vendor_dev_pm_state);
+
+	goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
+
 	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-	if (ret)
+	if (ret && ret != -EOPNOTSUPP)
 		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
-	gti->pm_state = GTI_SUSPEND;
 }
 
 struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
@@ -871,12 +911,15 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 
 		GOOG_LOG("panel_is_lp_mode changed from %d to %d.\n",
 			gti->panel_is_lp_mode, panel_is_lp_mode);
-		if (panel_is_lp_mode)
+		if (panel_is_lp_mode) {
+			goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
 			gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
-		else
+		} else {
+			goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
 			gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
+		}
 		ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-		if (ret)
+		if (ret && ret != -EOPNOTSUPP)
 			GOOG_WARN("unexpected return(%d)!", ret);
 	}
 	gti->panel_is_lp_mode = panel_is_lp_mode;
@@ -890,7 +933,7 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 			gti->display_vrefresh = vrefresh;
 			gti->cmd.display_vrefresh_cmd.setting = vrefresh;
 			ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_VREFRESH);
-			if (ret)
+			if (ret && ret != -EOPNOTSUPP)
 				GOOG_WARN("unexpected return(%d)!", ret);
 		}
 	}
@@ -1892,29 +1935,240 @@ void goog_init_options(struct goog_touch_interface *gti,
 	}
 }
 
-void goog_notify_vendor_dev_pm_state_done(struct goog_touch_interface *gti,
-		enum gti_vendor_dev_pm_state state)
+int goog_pm_wake_lock(struct goog_touch_interface *gti,
+		enum gti_pm_wakelock_type type, bool skip_pm_resume)
 {
+	struct gti_pm* pm = NULL;
+	int ret = 0;
+	bool wait_resume = false;
+
+	if (gti == NULL)
+		return -ENODEV;
+	pm = &gti->pm;
+
+	mutex_lock(&pm->lock_mutex);
+
+	if (pm->locks & type) {
+		GOOG_DBG("unexpectedly lock: locks=0x%04X, type=0x%04X\n",
+				pm->locks, type);
+		mutex_unlock(&pm->lock_mutex);
+		return -EINVAL;
+	}
+
+	/*
+	 * If NON_WAKE_UP is set and the pm is suspend, we should ignore it.
+	 * For example, IRQs should only keep the bus active. IRQs received
+	 * while the pm is suspend should be ignored.
+	 */
+	if (skip_pm_resume && pm->locks == 0) {
+		mutex_unlock(&pm->lock_mutex);
+		return -EAGAIN;
+	}
+
+	pm->locks |= type;
+
+	if (skip_pm_resume) {
+		mutex_unlock(&pm->lock_mutex);
+		return ret;
+	}
+
+	/*
+	 * When triggering a wake, wait up to one second to resume.
+	 * SCREEN_ON does not need to wait.
+	 */
+	if (type != GTI_PM_WAKELOCK_TYPE_SCREEN_ON)
+		wait_resume = true;
+
+	mutex_unlock(&pm->lock_mutex);
+
+	/* Complete or cancel any outstanding transitions */
+	cancel_work_sync(&pm->suspend_work);
+	cancel_work_sync(&pm->resume_work);
+
+	queue_work(pm->event_wq, &pm->resume_work);
+
+	if (wait_resume) {
+		wait_for_completion_timeout(&pm->bus_resumed, msecs_to_jiffies(MSEC_PER_SEC));
+		if (pm->state != GTI_PM_RESUME) {
+			GOOG_ERR("Failed to wake the touch bus.\n");
+			ret = -ETIMEDOUT;
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(goog_pm_wake_lock);
+
+int goog_pm_wake_unlock(struct goog_touch_interface *gti,
+		enum gti_pm_wakelock_type type)
+{
+	struct gti_pm* pm = NULL;
 	int ret = 0;
 
-	if (!gti)
-		return;
+	if (gti == NULL)
+		return -ENODEV;
+	pm = &gti->pm;
 
-	if (gti->vendor_dev_pm_state != state) {
-		GOOG_LOG("pm state changed: %d -> %d.\n",
-			gti->vendor_dev_pm_state, state);
-		gti->vendor_dev_pm_state = state;
+	mutex_lock(&pm->lock_mutex);
+
+	if (!(pm->locks & type)) {
+		GOOG_DBG("unexpectedly unlock: locks=0x%04X, type=0x%04X\n",
+				pm->locks, type);
+		mutex_unlock(&pm->lock_mutex);
+		return -EINVAL;
 	}
-	if (gti->vendor_dev_pm_state == GTI_VENDOR_DEV_SUSPEND) {
-		if (gti->tbn_register_mask) {
-			ret = tbn_release_bus(gti->tbn_register_mask);
-			if (ret)
-				GOOG_ERR("tbn_release_bus failed, ret %d!\n", ret);
-		}
-		gti_debug_input_dump(gti);
+
+	pm->locks &= ~type;
+
+	if (pm->locks == 0) {
+		mutex_unlock(&pm->lock_mutex);
+		/* Complete or cancel any outstanding transitions */
+		cancel_work_sync(&pm->suspend_work);
+		cancel_work_sync(&pm->resume_work);
+
+		mutex_lock(&pm->lock_mutex);
+		if (pm->locks == 0)
+			queue_work(pm->event_wq, &pm->suspend_work);
 	}
+	mutex_unlock(&pm->lock_mutex);
+
+	return ret;
 }
-EXPORT_SYMBOL(goog_notify_vendor_dev_pm_state_done);
+EXPORT_SYMBOL(goog_pm_wake_unlock);
+
+bool goog_pm_wake_check_locked(struct goog_touch_interface *gti,
+		enum gti_pm_wakelock_type type)
+{
+	if (gti == NULL)
+		return -ENODEV;
+
+	return gti->pm.locks & type ? true : false;
+}
+EXPORT_SYMBOL(goog_pm_wake_check_locked);
+
+u32 goog_pm_wake_get_locks(struct goog_touch_interface *gti)
+{
+	if (gti == NULL)
+		return -ENODEV;
+
+	return gti->pm.locks;
+}
+EXPORT_SYMBOL(goog_pm_wake_get_locks);
+
+static void goog_pm_suspend_work(struct work_struct *work)
+{
+	struct gti_pm *pm = container_of(work, struct gti_pm, suspend_work);
+	struct goog_touch_interface *gti = container_of(pm,
+			struct goog_touch_interface, pm);
+	int ret = 0;
+
+	/* exit directly if device is already in suspend state */
+	if (pm->state == GTI_PM_SUSPEND) {
+		GOOG_WARN("GTI already suspended!\n");
+		return;
+	}
+	pm->state = GTI_PM_SUSPEND;
+
+	reinit_completion(&pm->bus_resumed);
+	if (pm->suspend)
+		pm->suspend(gti->vendor_dev);
+
+	if (gti->tbn_register_mask) {
+		ret = tbn_release_bus(gti->tbn_register_mask);
+		if (ret)
+			GOOG_ERR("tbn_release_bus failed, ret %d!\n", ret);
+	}
+	gti_debug_input_dump(gti);
+
+	pm_relax(gti->dev);
+}
+
+static void goog_pm_resume_work(struct work_struct *work)
+{
+	struct gti_pm *pm = container_of(work, struct gti_pm, resume_work);
+	struct goog_touch_interface *gti = container_of(pm,
+			struct goog_touch_interface, pm);
+	int ret = 0;
+
+	/* exit directly if device isn't in suspend state */
+	if (pm->state == GTI_PM_RESUME) {
+		GOOG_WARN("GTI already resumed!\n");
+		return;
+	}
+	pm->state = GTI_PM_RESUME;
+
+	pm_stay_awake(gti->dev);
+
+	if (gti->tbn_register_mask) {
+		ret = tbn_request_bus(gti->tbn_register_mask);
+		if (ret)
+			GOOG_ERR("tbn_request_bus failed, ret %d!\n", ret);
+	}
+
+	if (pm->resume)
+		pm->resume(gti->vendor_dev);
+
+	complete_all(&pm->bus_resumed);
+}
+
+int goog_pm_register_notification(struct goog_touch_interface *gti,
+		const struct dev_pm_ops* ops)
+{
+	if (gti == NULL)
+		return -ENODEV;
+
+	gti->pm.resume = ops->resume;
+	gti->pm.suspend = ops->suspend;
+	return 0;
+}
+EXPORT_SYMBOL(goog_pm_register_notification);
+
+int goog_pm_unregister_notification(struct goog_touch_interface *gti)
+{
+	if (gti == NULL)
+		return -ENODEV;
+
+	gti->pm.resume = NULL;
+	gti->pm.suspend = NULL;
+	return 0;
+}
+EXPORT_SYMBOL(goog_pm_unregister_notification);
+
+static int goog_pm_probe(struct goog_touch_interface *gti)
+{
+	struct gti_pm* pm = &gti->pm;
+	int ret = 0;
+
+	pm->state = GTI_PM_RESUME;
+	pm->locks = GTI_PM_WAKELOCK_TYPE_SCREEN_ON;
+	pm->event_wq = alloc_workqueue(
+		"gti_pm_wq", WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
+	if (!pm->event_wq) {
+		GOOG_ERR("Failed to create work thread for pm!\n");
+		ret = -ENOMEM;
+		goto err_alloc_workqueue;
+	}
+
+	mutex_init(&pm->lock_mutex);
+	INIT_WORK(&pm->suspend_work, goog_pm_suspend_work);
+	INIT_WORK(&pm->resume_work, goog_pm_resume_work);
+
+	init_completion(&pm->bus_resumed);
+	complete_all(&pm->bus_resumed);
+
+	return ret;
+
+err_alloc_workqueue:
+	return ret;
+}
+
+static int goog_pm_remove(struct goog_touch_interface *gti)
+{
+	struct gti_pm* pm = &gti->pm;
+	if (pm->event_wq)
+		destroy_workqueue(pm->event_wq);
+	return 0;
+}
 
 struct goog_touch_interface *goog_touch_interface_probe(
 		void *private_data,
@@ -1985,6 +2239,8 @@ struct goog_touch_interface *goog_touch_interface_probe(
 	}
 
 	if (gti && gti->dev) {
+		goog_pm_probe(gti);
+
 		ret = sysfs_create_group(&gti->dev->kobj, &goog_attr_group);
 		if (ret)
 			GOOG_ERR("sysfs_create_group() failed, ret= %d!\n", ret);
@@ -1998,7 +2254,6 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 {
 	if (!gti)
 		return -ENODEV;
-
 
 	if (gti->tbn_enable && gti->tbn_register_mask)
 		unregister_tbn(&gti->tbn_register_mask);
@@ -2015,6 +2270,8 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 		device_destroy(gti_class, gti->dev_id);
 		gti_dev_num--;
 	}
+
+	goog_pm_remove(gti);
 
 	gti->offload_enable = false;
 	gti->v4l2_enable = false;
