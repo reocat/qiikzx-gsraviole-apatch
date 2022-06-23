@@ -131,8 +131,21 @@ enum gti_ping_mode : u32 {
 };
 
 enum gti_pm_state : u32 {
-	GTI_RESUME = 0,
-	GTI_SUSPEND,
+	GTI_PM_RESUME = 0,
+	GTI_PM_SUSPEND,
+};
+
+#define GTI_PM_WAKELOCK_TYPE_LOCK_MASK 0xFFFF
+/**
+ * @brief: wakelock type.
+ */
+enum gti_pm_wakelock_type : u32 {
+	GTI_PM_WAKELOCK_TYPE_SCREEN_ON = (1 << 0),
+	GTI_PM_WAKELOCK_TYPE_IRQ = (1 << 1),
+	GTI_PM_WAKELOCK_TYPE_FW_UPDATE = (1 << 2),
+	GTI_PM_WAKELOCK_TYPE_SYSFS = (1 << 3),
+	GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE = (1 << 4),
+	GTI_PM_WAKELOCK_TYPE_BUGREPORT = (1 << 5),
 };
 
 enum gti_reset_mode : u32 {
@@ -338,6 +351,32 @@ struct gti_optional_configuration {
 };
 
 /**
+ * struct gti_pm - power manager for GTI.
+ * @suspend_work: a work to run suspend.
+ * @resume_work: a work to run resume.
+ * @event_wq: a work queue to run suspend/resume work.
+ * @bus_resumed: a completion for waiting for resume is done.
+ * @locks: the lock state.
+ * @lock_mutex: protect the lock state.
+ * @state: GTI pm state.
+ * @resume: callback for notifying resume.
+ * @suspend: callback for notifying suspend.
+ */
+struct gti_pm {
+	struct work_struct suspend_work;
+	struct work_struct resume_work;
+	struct workqueue_struct *event_wq;
+	struct completion bus_resumed;
+
+	u32 locks;
+	struct mutex lock_mutex;
+	enum gti_pm_state state;
+
+	int (*resume)(struct device *dev);
+	int (*suspend)(struct device *dev);
+};
+
+/**
  * struct goog_touch_interface - Google touch interface data for Pixel.
  * @vendor_private_data: the private data pointer that used by touch vendor driver.
  * @vendor_dev: pointer to struct device that used by touch vendor driver.
@@ -356,10 +395,9 @@ struct gti_optional_configuration {
  * @display_vrefresh: display vrefresh in Hz.
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
- * @vendor_dev_pm_state: vendor device pm state.
  * @screen_protector_mode_setting: the setting of screen protector mode.
- * @pm_state: GTI device pm state.
  * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
+ * @pm: struct that used by gti pm.
  * @panel_is_lp_mode: display is in low power mode.
  * @force_legacy_report: force to directly report input by kernel input API.
  * @offload_enable: touch offload is enabled or not.
@@ -401,10 +439,9 @@ struct goog_touch_interface {
 	int display_vrefresh;
 	enum gti_mf_mode mf_mode;
 	enum gti_mf_state mf_state;
-	enum gti_pm_state pm_state;
-	enum gti_vendor_dev_pm_state vendor_dev_pm_state;
 	enum gti_screen_protector_mode screen_protector_mode_setting;
 	u32 tbn_register_mask;
+	struct gti_pm pm;
 
 	bool panel_is_lp_mode;
 	bool force_legacy_report;
@@ -459,9 +496,6 @@ inline void goog_input_report_key(
 		struct input_dev *dev, unsigned int code, int value);
 inline void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev);
 
-void goog_notify_vendor_dev_pm_state_done(
-		struct goog_touch_interface *gti,
-		enum gti_vendor_dev_pm_state state);
 int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type);
 int goog_input_process(struct goog_touch_interface *gti);
 struct goog_touch_interface *goog_touch_interface_probe(
@@ -472,6 +506,17 @@ struct goog_touch_interface *goog_touch_interface_probe(
 			enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd),
 		struct gti_optional_configuration *options);
 int goog_touch_interface_remove(struct goog_touch_interface *gti);
+
+int goog_pm_wake_lock(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type, bool skip_pm_resume);
+int goog_pm_wake_unlock(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type);
+bool goog_pm_wake_check_locked(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type);
+u32 goog_pm_wake_get_locks(struct goog_touch_interface *gti);
+int goog_pm_register_notification(struct goog_touch_interface *gti,
+		const struct dev_pm_ops* ops);
+int goog_pm_unregister_notification(struct goog_touch_interface *gti);
 
 #endif // _GOOG_TOUCH_INTERFACE_
 
