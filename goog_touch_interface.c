@@ -18,7 +18,12 @@ static struct class *gti_class;
 static u8 gti_dev_num;
 
 /*-----------------------------------------------------------------------------
- * sysfs: forward declarations, structures and functions.
+ * GTI/common: forward declarations, structures and functions.
+ */
+static void goog_offload_set_running(struct goog_touch_interface *gti, bool running);
+
+/*-----------------------------------------------------------------------------
+ * GTI/sysfs: forward declarations, structures and functions.
  */
 static ssize_t fw_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
@@ -283,10 +288,14 @@ static ssize_t offload_enabled_store(struct device *dev,
 {
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
-	if (kstrtobool(buf, &gti->offload_enable))
+	if (kstrtobool(buf, &gti->offload_enable)) {
 		GOOG_LOG("error: invalid input!\n");
-	else
+	} else {
 		GOOG_LOG("offload_enable= %d\n", gti->offload_enable);
+		/* Force to turn off offload by request. */
+		if (!gti->offload_enable)
+			goog_offload_set_running(gti, false);
+	}
 
 	return size;
 }
@@ -1016,6 +1025,12 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 	if (ret == -ESRCH)
 		ret = gti->vendor_default_handler(private_data, cmd_type, &gti->cmd);
 
+	/* Take unsupported cmd_type as debug logs for compatibility check. */
+	if (ret == -EOPNOTSUPP) {
+		GOOG_DBG("unsupported request cmd_type %#x!\n", cmd_type);
+		ret = 0;
+	}
+
 	return ret;
 }
 
@@ -1251,7 +1266,7 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 				"enable" : "disable");
 }
 
-void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
+static void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
 {
 	if (gti->offload.offload_running != running) {
 		gti->offload.offload_running = running;
