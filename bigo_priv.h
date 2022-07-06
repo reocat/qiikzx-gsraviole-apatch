@@ -55,6 +55,7 @@ struct bigo_bw {
 struct power_manager {
 	int bwindex;
 	struct exynos_pm_qos_request qos_bigo;
+	struct exynos_pm_qos_request qos_req_mif;
 	struct list_head opps;
 	struct list_head bw;
 	u32 max_load;
@@ -132,6 +133,8 @@ struct bigo_inst {
 	u32 hw_cycles[AVG_CNT];
 	struct completion job_comp;
 	struct bigo_job job;
+	/* bytes per pixel */
+	u32 bpp;
 };
 
 inline void set_curr_inst(struct bigo_core *core, struct bigo_inst *inst);

@@ -36,6 +36,7 @@
 #define DEFAULT_FPS 60
 #define BIGO_SMC_ID 0xd
 #define BIGO_MAX_INST_NUM 16
+#define BIGO_HBD_BIT BIT(17)
 
 static int bigo_worker_thread(void *data);
 
@@ -147,6 +148,7 @@ static int bigo_open(struct inode *inode, struct file *file)
 	inst->height = DEFAULT_WIDTH;
 	inst->width = DEFAULT_HEIGHT;
 	inst->fps = DEFAULT_FPS;
+	inst->bpp = 1;
 	inst->core = core;
 	inst->job.regs_size = core->regs_size;
 	inst->job.regs = kzalloc(core->regs_size, GFP_KERNEL);
@@ -187,17 +189,15 @@ err:
 static void bigo_close(struct kref *ref)
 {
 	struct bigo_inst *inst = container_of(ref, struct bigo_inst, refcount);
-	struct bigo_core *core = inst->core;
 
-	if (!inst || !core) {
-		pr_err("No instance or core\n");
-		return;
+	if (inst && inst->core) {
+		clear_job_from_prioq(inst->core, inst);
+		bigo_unmap_all(inst);
+		kfree(inst->job.regs);
+		kfree(inst);
+		bigo_update_qos(inst->core);
+		pr_info("closed instance\n");
 	}
-	bigo_unmap_all(inst);
-	kfree(inst->job.regs);
-	kfree(inst);
-	bigo_update_qos(core);
-	pr_info("closed instance\n");
 }
 
 static int bigo_release(struct inode *inode, struct file *file)
@@ -342,6 +342,8 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 	struct bigo_ioc_mapping mapping;
 	struct bigo_ioc_frmsize frmsize;
 	struct bigo_cache_info cinfo;
+	struct bigo_inst *curr_inst;
+	bool found = false;
 	int rc = 0;
 
 	if (_IOC_TYPE(cmd) != BIGO_IOC_MAGIC) {
@@ -356,16 +358,40 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 		pr_err("No instance or core\n");
 		return -EINVAL;
 	}
+	mutex_lock(&core->lock);
+	list_for_each_entry(curr_inst, &core->instances, list) {
+		if (curr_inst == inst) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		mutex_unlock(&core->lock);
+		pr_err("this instance is invalid");
+		return -EINVAL;
+	}
+	kref_get(&inst->refcount);
+	mutex_unlock(&core->lock);
 	switch (cmd) {
 	case BIGO_IOCX_PROCESS:
 	{
 		struct bigo_ioc_regs desc;
 		struct bigo_job *job = &inst->job;
 		long ret;
+		u32 hbd;
+		u32 bpp;
 
 		if (copy_regs_from_user(core, &desc, user_desc, job)) {
 			pr_err("Failed to copy regs from user\n");
 			return -EFAULT;
+		}
+
+		hbd = (((u32*)job->regs)[3]) & BIGO_HBD_BIT;
+		bpp = hbd ? 2:1;
+		if (bpp != inst->bpp) {
+			inst->bpp = bpp;
+			bigo_update_qos(core);
 		}
 
 		if(enqueue_prioq(core, inst)) {
@@ -378,6 +404,7 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 			msecs_to_jiffies(JOB_COMPLETE_TIMEOUT_MS * 16));
 		if (!ret) {
 			pr_err("timed out waiting for HW: %d\n", rc);
+			clear_job_from_prioq(core, inst);
 			rc = -ETIMEDOUT;
 		} else {
 			rc = (ret > 0) ? 0 : ret;
@@ -452,6 +479,7 @@ static long bigo_unlocked_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 
+	kref_put(&inst->refcount, bigo_close);
 	return rc;
 }
 
@@ -589,7 +617,6 @@ static int bigo_worker_thread(void *data)
 	done:
 		job->status = rc;
 		complete(&inst->job_comp);
-		kref_put(&inst->refcount, bigo_close);
 	}
 	return 0;
 }
