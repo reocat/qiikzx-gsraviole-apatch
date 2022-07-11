@@ -708,17 +708,20 @@ inline void gti_debug_input_push(struct goog_touch_interface *gti, int slot)
 {
 	struct gti_debug_input fifo;
 
-	if (slot < MAX_SLOTS) {
-		/*
-		 * Use kfifo as circular buffer by skipping one element
-		 * when fifo is full.
-		 */
-		if (kfifo_is_full(&gti->debug_fifo))
-			kfifo_skip(&gti->debug_fifo);
-
-		memcpy(&fifo, &gti->debug_input[slot], sizeof(struct gti_debug_input));
-		kfifo_in(&gti->debug_fifo, &fifo, 1);
+	if (slot < 0 || slot >= MAX_SLOTS) {
+		GOOG_ERR("Invalid slot: %d\n", slot);
+		return;
 	}
+
+	/*
+	 * Use kfifo as circular buffer by skipping one element
+	 * when fifo is full.
+	 */
+	if (kfifo_is_full(&gti->debug_fifo))
+		kfifo_skip(&gti->debug_fifo);
+
+	memcpy(&fifo, &gti->debug_input[slot], sizeof(struct gti_debug_input));
+	kfifo_in(&gti->debug_fifo, &fifo, 1);
 }
 
 inline void gti_debug_input_pop(struct goog_touch_interface *gti,
@@ -1168,10 +1171,14 @@ void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame, int channel)
 {
 	int i;
+	struct TouchOffloadDataCoord *dc;
 
-	struct TouchOffloadDataCoord *dc =
-		(struct TouchOffloadDataCoord *)frame->channel_data[channel];
+	if (channel < 0 || channel >= MAX_CHANNELS) {
+		GOOG_ERR("Invalid channel: %d\n", channel);
+		return;
+	}
 
+	dc = (struct TouchOffloadDataCoord *)frame->channel_data[channel];
 	memset(dc, 0, frame->channel_data_size[channel]);
 	dc->header.channel_type = TOUCH_DATA_TYPE_COORD;
 	dc->header.channel_size = TOUCH_OFFLOAD_FRAME_SIZE_COORD;
@@ -1189,9 +1196,14 @@ void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 void goog_offload_populate_mutual_channel(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame, int channel, u8 *buffer, u32 size)
 {
-	struct TouchOffloadData2d *mutual =
-		(struct TouchOffloadData2d *)frame->channel_data[channel];
+	struct TouchOffloadData2d *mutual;
 
+	if (channel < 0 || channel >= MAX_CHANNELS) {
+		GOOG_ERR("Invalid channel: %d\n", channel);
+		return;
+	}
+
+	mutual = (struct TouchOffloadData2d *)frame->channel_data[channel];
 	mutual->tx_size = gti->offload.caps.tx_size;
 	mutual->rx_size = gti->offload.caps.rx_size;
 	mutual->header.channel_type = frame->channel_type[channel];
@@ -1204,9 +1216,14 @@ void goog_offload_populate_mutual_channel(struct goog_touch_interface *gti,
 void goog_offload_populate_self_channel(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame, int channel, u8 *buffer, u32 size)
 {
-	struct TouchOffloadData1d *self =
-		(struct TouchOffloadData1d *)frame->channel_data[channel];
+	struct TouchOffloadData1d *self;
 
+	if (channel < 0 || channel >= MAX_CHANNELS) {
+		GOOG_ERR("Invalid channel: %d\n", channel);
+		return;
+	}
+
+	self = (struct TouchOffloadData1d *)frame->channel_data[channel];
 	self->tx_size = gti->offload.caps.tx_size;
 	self->rx_size = gti->offload.caps.rx_size;
 	self->header.channel_type = frame->channel_type[channel];
@@ -1631,19 +1648,22 @@ void goog_input_mt_slot(
 		struct goog_touch_interface *gti,
 		struct input_dev *dev, int slot)
 {
+	if (slot < 0 || slot >= MAX_SLOTS) {
+		GOOG_ERR("Invalid slot: %d\n", slot);
+		return;
+	}
+
 	if (goog_input_legacy_report(gti))
 		input_mt_slot(dev, slot);
 
-	if (slot < MAX_SLOTS) {
-		gti->slot = slot;
-		/*
-		 * Make sure the input timestamp should be set before updating 1st mt_slot.
-		 * This is for input report switch between offload and legacy.
-		 */
-		if (!gti->slot_bit_in_use && !gti->input_timestamp_changed)
-			GOOG_ERR("please exec goog_input_set_timestamp before %s!\n", __func__);
-		set_bit(slot, &gti->slot_bit_in_use);
-	}
+	gti->slot = slot;
+	/*
+	 * Make sure the input timestamp should be set before updating 1st mt_slot.
+	 * This is for input report switch between offload and legacy.
+	 */
+	if (!gti->slot_bit_in_use && !gti->input_timestamp_changed)
+		GOOG_ERR("please exec goog_input_set_timestamp before %s!\n", __func__);
+	set_bit(slot, &gti->slot_bit_in_use);
 }
 EXPORT_SYMBOL(goog_input_mt_slot);
 
@@ -1679,26 +1699,24 @@ void goog_input_report_abs(
 	if (goog_input_legacy_report(gti))
 		input_report_abs(dev, code, value);
 
-	if (gti->slot < MAX_SLOTS) {
-		switch (code) {
-		case ABS_MT_POSITION_X:
-			gti->offload.coords[gti->slot].x = value;
-			break;
-		case ABS_MT_POSITION_Y:
-			gti->offload.coords[gti->slot].y = value;
-			break;
-		case ABS_MT_TOUCH_MAJOR:
-			gti->offload.coords[gti->slot].major = value;
-			break;
-		case ABS_MT_TOUCH_MINOR:
-			gti->offload.coords[gti->slot].minor = value;
-			break;
-		case ABS_MT_PRESSURE:
-			gti->offload.coords[gti->slot].pressure = value;
-			break;
-		default:
-			break;
-		}
+	switch (code) {
+	case ABS_MT_POSITION_X:
+		gti->offload.coords[gti->slot].x = value;
+		break;
+	case ABS_MT_POSITION_Y:
+		gti->offload.coords[gti->slot].y = value;
+		break;
+	case ABS_MT_TOUCH_MAJOR:
+		gti->offload.coords[gti->slot].major = value;
+		break;
+	case ABS_MT_TOUCH_MINOR:
+		gti->offload.coords[gti->slot].minor = value;
+		break;
+	case ABS_MT_PRESSURE:
+		gti->offload.coords[gti->slot].pressure = value;
+		break;
+	default:
+		break;
 	}
 }
 EXPORT_SYMBOL(goog_input_report_abs);
