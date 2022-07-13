@@ -1048,6 +1048,9 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 	case GTI_CMD_SET_GRIP_MODE:
 		ret = gti->options.set_grip_mode(private_data, &gti->cmd.grip_cmd);
 		break;
+	case GTI_CMD_SET_HEATMAP_ENABLED:
+		ret = gti->options.set_heatmap_enabled(private_data, &gti->cmd.heatmap_cmd);
+		break;
 	case GTI_CMD_SET_IRQ_MODE:
 		ret = gti->options.set_irq_mode(private_data, &gti->cmd.irq_cmd);
 		break;
@@ -1325,6 +1328,11 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 		GOOG_ERR("Failed to %s screen protector mode!\n",
 				gti->screen_protector_mode_setting == GTI_SCREEN_PROTECTOR_MODE_ENABLE ?
 				"enable" : "disable");
+
+	gti->cmd.heatmap_cmd.setting = GTI_HEATMAP_ENABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_HEATMAP_ENABLED);
+	if (ret != 0)
+		GOOG_ERR("Failed to enable heatmap!\n");
 }
 
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
@@ -1635,11 +1643,6 @@ void goog_input_set_timestamp(
 		if (gti->force_legacy_report) {
 			GOOG_DBG("Disable force_legacy_report as usual state.\n");
 			gti->force_legacy_report = false;
-
-			/* Once device is from suspend to resume, the grip/palm state will
-			 * be reset to default. Update the grip/palm state again.
-			 */
-			goog_update_fw_settings(gti);
 		}
 	}
 
@@ -1858,6 +1861,12 @@ static int goog_set_grip_mode_nop(
 	return -ESRCH;
 }
 
+static int goog_set_heatmap_enabled_nop(
+		void *private_data, struct gti_heatmap_cmd *cmd)
+{
+	return -ESRCH;
+}
+
 static int goog_set_irq_mode_nop(
 		void *private_data, struct gti_irq_cmd *cmd)
 {
@@ -1908,6 +1917,7 @@ void goog_init_options(struct goog_touch_interface *gti,
 	gti->options.selftest = goog_selftest_nop;
 	gti->options.set_continuous_report = goog_set_continuous_report_nop;
 	gti->options.set_grip_mode = goog_set_grip_mode_nop;
+	gti->options.set_heatmap_enabled = goog_set_heatmap_enabled_nop;
 	gti->options.set_irq_mode = goog_set_irq_mode_nop;
 	gti->options.set_palm_mode = goog_set_palm_mode_nop;
 	gti->options.set_scan_mode = goog_set_scan_mode_nop;
@@ -1950,6 +1960,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->options.set_continuous_report = options->set_continuous_report;
 		if (options->set_grip_mode)
 			gti->options.set_grip_mode = options->set_grip_mode;
+		if (options->set_heatmap_enabled)
+			gti->options.set_heatmap_enabled = options->set_heatmap_enabled;
 		if (options->set_irq_mode)
 			gti->options.set_irq_mode = options->set_irq_mode;
 		if (options->set_palm_mode)
@@ -2135,6 +2147,11 @@ static void goog_pm_resume_work(struct work_struct *work)
 
 	if (pm->resume)
 		pm->resume(gti->vendor_dev);
+
+	/* Once device is from suspend to resume, the grip/palm state will
+	 * be reset to default. Update the grip/palm state again.
+	 */
+	goog_update_fw_settings(gti);
 
 	complete_all(&pm->bus_resumed);
 }

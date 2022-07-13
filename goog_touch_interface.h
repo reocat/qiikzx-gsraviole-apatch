@@ -62,6 +62,7 @@ enum gti_cmd_type : u32 {
 	GTI_CMD_SET_OPS_START = 0x400,
 	GTI_CMD_SET_CONTINUOUS_REPORT,
 	GTI_CMD_SET_GRIP_MODE,
+	GTI_CMD_SET_HEATMAP_ENABLED,
 	GTI_CMD_SET_IRQ_MODE,
 	GTI_CMD_SET_PALM_MODE,
 	GTI_CMD_SET_SCAN_MODE,
@@ -83,6 +84,11 @@ enum gti_display_state_setting : u32 {
 enum gti_grip_setting : u32 {
 	GTI_GRIP_DISABLE = 0,
 	GTI_GRIP_ENABLE,
+};
+
+enum gti_heatmap_setting : u32 {
+	GTI_HEATMAP_DISABLE = 0,
+	GTI_HEATMAP_ENABLE,
 };
 
 enum gti_irq_mode : u32 {
@@ -229,6 +235,10 @@ struct gti_grip_cmd {
 	enum gti_grip_setting setting;
 };
 
+struct gti_heatmap_cmd {
+	enum gti_heatmap_setting setting;
+};
+
 struct gti_irq_cmd {
 	enum gti_irq_mode setting;
 };
@@ -275,6 +285,7 @@ struct gti_sensor_data_cmd {
  * @display_vrefresh_cmd: command to notify display vertical refresh rate.
  * @fw_version_cmd: command to get fw version.
  * @grip_cmd: command to set/get grip mode.
+ * @heatmap_cmd: command to set heatmap enabled.
  * @irq_cmd: command to set/get irq mode.
  * @palm_cmd: command to set/get palm mode.
  * @ping_cmd: command to ping T-IC.
@@ -291,6 +302,7 @@ struct gti_union_cmd_data {
 	struct gti_display_vrefresh_cmd display_vrefresh_cmd;
 	struct gti_fw_version_cmd fw_version_cmd;
 	struct gti_grip_cmd grip_cmd;
+	struct gti_heatmap_cmd heatmap_cmd;
 	struct gti_irq_cmd irq_cmd;
 	struct gti_palm_cmd palm_cmd;
 	struct gti_ping_cmd ping_cmd;
@@ -320,6 +332,7 @@ struct gti_union_cmd_data {
  * @selftest: vendor driver operation to exec self-test.
  * @set_continuous_report: vendor driver operation to apply the continuous reporting setting.
  * @set_grip_mode: vendor driver operation to apply the grip setting.
+ * @set_heatmap_enabled: vendor driver operation to apply the heatmap setting.
  * @set_irq_mode: vendor driver operation to apply the irq setting.
  * @set_palm_mode: vendor driver operation to apply the palm setting.
  * @set_scan_mode: vendor driver operation to set scan mode.
@@ -343,6 +356,7 @@ struct gti_optional_configuration {
 	int (*selftest)(void *private_data, struct gti_selftest_cmd *cmd);
 	int (*set_continuous_report)(void *private_data, struct gti_continuous_report_cmd *cmd);
 	int (*set_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
+	int (*set_heatmap_enabled)(void *private_data, struct gti_heatmap_cmd *cmd);
 	int (*set_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
 	int (*set_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
 	int (*set_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
