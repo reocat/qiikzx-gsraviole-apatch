@@ -2147,11 +2147,6 @@ static void goog_pm_resume_work(struct work_struct *work)
 	if (pm->resume)
 		pm->resume(gti->vendor_dev);
 
-	/* Once device is from suspend to resume, the grip/palm state will
-	 * be reset to default. Update the grip/palm state again.
-	 */
-	goog_update_fw_settings(gti);
-
 	complete_all(&pm->bus_resumed);
 }
 
@@ -2177,6 +2172,43 @@ int goog_pm_unregister_notification(struct goog_touch_interface *gti)
 	return 0;
 }
 EXPORT_SYMBOL(goog_pm_unregister_notification);
+
+void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
+		enum gti_fw_status status, struct gti_fw_status_data* data)
+{
+	switch (status) {
+	case GTI_FW_STATUE_RESET:
+		GOOG_LOG("Firmware has been reset\n");
+		goog_update_fw_settings(gti);
+		break;
+	case GTI_FW_STATUE_PALM_ENTER:
+		GOOG_LOG("Enter palm mode\n");
+		break;
+	case GTI_FW_STATUE_PALM_EXIT:
+		GOOG_LOG("Exit palm mode\n");
+		break;
+	case GTI_FW_STATUE_GRIP_ENTER:
+		GOOG_LOG("Enter grip mode\n");
+		break;
+	case GTI_FW_STATUE_GRIP_EXIT:
+		GOOG_LOG("Exit grip mode\n");
+		break;
+	case GTI_FW_STATUE_NOISE_MODE:
+		if (data == NULL) {
+			GOOG_LOG("Noise level is changed, level: unknown\n");
+		} else {
+			if (data->noise_level == GTI_NOISE_MODE_EXIT) {
+				GOOG_LOG("Exit noise mode\n");
+			} else {
+				GOOG_LOG("Enter noise mode, level: %d\n", data->noise_level);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+}
+EXPORT_SYMBOL(goog_notify_fw_status_changed);
 
 static int goog_pm_probe(struct goog_touch_interface *gti)
 {
