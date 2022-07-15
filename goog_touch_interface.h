@@ -200,6 +200,22 @@ enum gti_vendor_dev_pm_state : u32 {
 	GTI_VENDOR_DEV_SUSPEND,
 };
 
+enum gti_fw_status : u32 {
+	GTI_FW_STATUE_RESET = 0,
+	GTI_FW_STATUE_PALM_ENTER,
+	GTI_FW_STATUE_PALM_EXIT,
+	GTI_FW_STATUE_GRIP_ENTER,
+	GTI_FW_STATUE_GRIP_EXIT,
+	GTI_FW_STATUE_NOISE_MODE,
+};
+
+enum gti_noise_mode_level : u8 {
+	GTI_NOISE_MODE_EXIT = 0,
+	GTI_NOISE_MODE_LEVEL1,
+	GTI_NOISE_MODE_LEVEL2,
+	GTI_NOISE_MODE_LEVEL3,
+};
+
 /*-----------------------------------------------------------------------------
  * Structures.
  */
@@ -312,6 +328,14 @@ struct gti_union_cmd_data {
 	struct gti_selftest_cmd selftest_cmd;
 	struct gti_sensing_cmd sensing_cmd;
 	struct gti_sensor_data_cmd sensor_data_cmd;
+};
+
+/**
+ * struct gti_fw_status_data - GTI fw status data for notifying changed.
+ * @noise_level: the noise level for noise mode.
+ */
+struct gti_fw_status_data {
+	enum gti_noise_mode_level noise_level;
 };
 
 /**
@@ -533,5 +557,7 @@ int goog_pm_register_notification(struct goog_touch_interface *gti,
 		const struct dev_pm_ops* ops);
 int goog_pm_unregister_notification(struct goog_touch_interface *gti);
 
+void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
+		enum gti_fw_status status, struct gti_fw_status_data* data);
 #endif // _GOOG_TOUCH_INTERFACE_
 
