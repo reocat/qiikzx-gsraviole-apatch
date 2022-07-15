@@ -1189,6 +1189,7 @@ void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 		dc->coords[i].major = gti->offload.coords[i].major;
 		dc->coords[i].minor = gti->offload.coords[i].minor;
 		dc->coords[i].pressure = gti->offload.coords[i].pressure;
+		dc->coords[i].rotation = gti->offload.coords[i].rotation;
 		dc->coords[i].status = gti->offload.coords[i].status;
 	}
 }
@@ -1376,6 +1377,9 @@ void goog_offload_input_report(void *handle,
 				report->coords[i].minor);
 			input_report_abs(gti->vendor_input_dev, ABS_MT_PRESSURE,
 				report->coords[i].pressure);
+			if (gti->orientation_enabled)
+				input_report_abs(gti->vendor_input_dev, ABS_MT_ORIENTATION,
+					report->coords[i].rotation);
 		} else {
 			clear_bit(i, &slot_bit_active);
 			input_mt_slot(gti->vendor_input_dev, i);
@@ -1486,6 +1490,8 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 			"goog,default-grip-disabled") ? GTI_GRIP_DISABLE : GTI_GRIP_ENABLE;
 	gti->default_palm_enabled = of_property_read_bool(np,
 			"goog,default-palm-disabled") ? GTI_PALM_DISABLE : GTI_PALM_ENABLE;
+
+	gti->orientation_enabled = of_property_read_bool(np, "goog,orientation-enabled");
 
 	gti->heatmap_buf_size = gti->offload.caps.tx_size * gti->offload.caps.rx_size * sizeof(u16);
 	gti->heatmap_buf = devm_kzalloc(gti->vendor_dev, gti->heatmap_buf_size, GFP_KERNEL);
@@ -1714,6 +1720,9 @@ void goog_input_report_abs(
 		break;
 	case ABS_MT_PRESSURE:
 		gti->offload.coords[gti->slot].pressure = value;
+		break;
+	case ABS_MT_ORIENTATION:
+		gti->offload.coords[gti->slot].rotation = value;
 		break;
 	default:
 		break;
