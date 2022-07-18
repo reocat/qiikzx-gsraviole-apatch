@@ -451,7 +451,6 @@ struct goog_touch_interface {
 	bool input_timestamp_changed;
 	bool default_grip_enabled;
 	bool default_palm_enabled;
-	bool orientation_enabled;
 	union {
 	u8 offload_id_byte[4];
 	u32 offload_id;
