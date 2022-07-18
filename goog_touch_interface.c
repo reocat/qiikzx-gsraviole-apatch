@@ -1647,7 +1647,7 @@ void goog_offload_input_report(void *handle,
 				report->coords[i].minor);
 			input_report_abs(gti->vendor_input_dev, ABS_MT_PRESSURE,
 				report->coords[i].pressure);
-			if (gti->orientation_enabled)
+			if (gti->offload.caps.rotation_reporting)
 				input_report_abs(gti->vendor_input_dev, ABS_MT_ORIENTATION,
 					report->coords[i].rotation);
 		} else {
@@ -1739,6 +1739,8 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	gti->offload.caps.filter_grip = true;
 	gti->offload.caps.filter_palm = true;
 	gti->offload.caps.num_sensitivity_settings = 1;
+	gti->offload.caps.rotation_reporting = of_property_read_bool(np,
+		"goog,offload-caps-rotation-reporting");
 
 	gti->offload.hcallback = (void *)gti;
 	gti->offload.report_cb = goog_offload_input_report;
@@ -1761,8 +1763,6 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 			"goog,default-grip-disabled") ? GTI_GRIP_DISABLE : GTI_GRIP_ENABLE;
 	gti->default_palm_enabled = of_property_read_bool(np,
 			"goog,default-palm-disabled") ? GTI_PALM_DISABLE : GTI_PALM_ENABLE;
-
-	gti->orientation_enabled = of_property_read_bool(np, "goog,orientation-enabled");
 
 	gti->heatmap_buf_size = gti->offload.caps.tx_size * gti->offload.caps.rx_size * sizeof(u16);
 	gti->heatmap_buf = devm_kzalloc(gti->vendor_dev, gti->heatmap_buf_size, GFP_KERNEL);
