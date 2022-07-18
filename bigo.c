@@ -193,9 +193,9 @@ static void bigo_close(struct kref *ref)
 	if (inst && inst->core) {
 		clear_job_from_prioq(inst->core, inst);
 		bigo_unmap_all(inst);
+		bigo_update_qos(inst->core);
 		kfree(inst->job.regs);
 		kfree(inst);
-		bigo_update_qos(inst->core);
 		pr_info("closed instance\n");
 	}
 }
