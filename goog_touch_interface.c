@@ -1471,7 +1471,8 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 
 	gti->offload.caps.continuous_reporting = true;
 	gti->offload.caps.noise_reporting = false;
-	gti->offload.caps.cancel_reporting = false;
+	gti->offload.caps.cancel_reporting =
+		of_property_read_bool(np, "goog,offload-caps-cancel-reporting");
 	gti->offload.caps.size_reporting = true;
 	gti->offload.caps.filter_grip = true;
 	gti->offload.caps.filter_palm = true;
@@ -2281,6 +2282,11 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		INIT_KFIFO(gti->debug_fifo);
 		for (i = 0 ; i < MAX_SLOTS ; i++)
 			gti->debug_input[i].slot = i;
+		/*
+		 * Initialize the ABS_MT_TOOL_TYPE to support touch cancel.
+		 */
+		input_set_abs_params(input_dev, ABS_MT_TOOL_TYPE,
+			MT_TOOL_FINGER, MT_TOOL_PALM, 0, 0);
 	}
 
 	if (!gti_class)
