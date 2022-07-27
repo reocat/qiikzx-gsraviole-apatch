@@ -676,6 +676,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->panel_idle_vrefresh = 0;
 	ctx->current_binned_lp = NULL;
 	ctx->cabc_mode = CABC_OFF;
+	ctx->current_cabc_mode = CABC_OFF;
 
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
@@ -863,7 +864,10 @@ static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mod
 
 	/* force off will not change the cabc_mode node */
 	mode = !force_off ? cabc_mode : CABC_OFF;
-	funcs->set_cabc_mode(ctx, mode);
+	if (ctx->current_cabc_mode != mode) {
+		funcs->set_cabc_mode(ctx, mode);
+		ctx->current_cabc_mode = mode;
+	}
 	ctx->cabc_mode = cabc_mode;
 	dev_dbg(ctx->dev, "set cabc mode: %d, force_off: %d\n", cabc_mode, force_off);
 }

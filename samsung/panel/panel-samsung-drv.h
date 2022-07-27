@@ -609,6 +609,9 @@ struct exynos_panel {
 	ktime_t last_panel_idle_set_ts;
 	struct delayed_work idle_work;
 
+	/* Record the current CABC mode if force_off enabled */
+	enum exynos_cabc_mode current_cabc_mode;
+
 	/**
 	 * Record the last refresh rate switch. Note the mode switch doesn't
 	 * mean rr switch so it differs from last_mode_set_ts
