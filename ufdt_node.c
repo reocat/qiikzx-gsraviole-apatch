@@ -29,6 +29,14 @@ struct ufdt_node *ufdt_node_construct(void *fdtp, fdt32_t *fdt_tag_ptr,
     res->parent.fdt_tag_ptr = fdt_tag_ptr;
     res->parent.sibling = NULL;
     res->name = fdt_string(fdtp, fdt32_to_cpu(prop->nameoff));
+
+    /* fdt_string() may fail */
+    if (!res->name) {
+      dto_error("Failed to get property name\n");
+      ufdt_node_pool_free(pool, res);
+      res = NULL;
+    }
+
     return (struct ufdt_node *)res;
   } else {
     struct ufdt_node_fdt_node *res = (struct ufdt_node_fdt_node *)buf;
