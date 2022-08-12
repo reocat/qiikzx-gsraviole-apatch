@@ -421,6 +421,7 @@ static int _ufdt_output_strtab_to_fdt(const struct ufdt *tree, void *fdt) {
 
 int ufdt_to_fdt(const struct ufdt *tree, void *buf, int buf_size) {
   if (tree->num_used_fdtps == 0) return -1;
+  if (tree->root == NULL) return -1;
 
   int err;
   err = fdt_create(buf, buf_size);
@@ -446,9 +447,11 @@ int ufdt_to_fdt(const struct ufdt *tree, void *buf, int buf_size) {
   if (err < 0) return -1;
 
   err = _ufdt_output_node_to_fdt(tree, buf, tree->root, &dict);
-  if (err < 0) return -1;
 
+  // Ensure property_dict is freed, even on error path.
   ufdt_prop_dict_destruct(&dict);
+
+  if (err < 0) return -1;
 
   err = fdt_finish(buf);
   if (err < 0) return -1;
