@@ -149,7 +149,13 @@ static struct ufdt_node *fdt_to_ufdt_tree(void *fdtp, int cur_fdt_tag_offset,
 
       do {
         cur_fdt_tag_offset = *next_fdt_tag_offset;
+
         tag = fdt_next_tag(fdtp, cur_fdt_tag_offset, next_fdt_tag_offset);
+        if (tag == FDT_END) {
+          dto_error("failed to get next tag\n");
+          break;
+        }
+
         child_node = fdt_to_ufdt_tree(fdtp, cur_fdt_tag_offset,
                                       next_fdt_tag_offset, tag, pool);
         ufdt_node_add_child(res, child_node);
