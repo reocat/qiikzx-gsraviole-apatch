@@ -20,7 +20,8 @@
 #define GOOG_LOG_NAME "GTI"
 #define GOOG_DBG(fmt, args...)    pr_debug("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)
-#define GOOG_LOG(fmt, args...)    pr_info("[%s] %s: " fmt, GOOG_LOG_NAME,\
+#define GOOG_LOG(fmt, args...)    pr_info("[%s] " fmt, GOOG_LOG_NAME, ##args)
+#define GOOG_INFO(fmt, args...)    pr_info("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)
 #define GOOG_WARN(fmt, args...)    pr_warn("[%s] %s: " fmt, GOOG_LOG_NAME,\
 					__func__, ##args)
@@ -245,7 +246,15 @@ struct gti_continuous_report_cmd {
 
 struct gti_debug_coord {
 	ktime_t time;
+	u64 irq_index;
 	struct TouchOffloadCoord coord;
+};
+
+struct gti_debug_health_check {
+	ktime_t irq_time;
+	u64 irq_index;
+	u64 input_index;
+	unsigned long slot_bit_active;
 };
 
 struct gti_debug_input {
@@ -474,10 +483,17 @@ struct gti_pm {
  * @slot_bit_changed: bitmap of slot state changed for this input process cycle.
  * @slot_bit_active: bitmap of active slot during GTI lifecycle.
  * @dev_id: dev_t used for google interface driver.
+ * @irq_index: irq count that handle by GTI.
+ * @input_index: the count of slot bit changed during goog_input_process().
+ * @vendor_irq_handler: irq handler that register by vendor driver.
+ * @vendor_irq_thread_fn: irq thread function that register by vendor driver.
+ * @vendor_irq_cookie: irq cookie that register by vendor driver.
  * @vendor_default_handler: touch vendor driver default operation.
- * @released_count: finger up count.
+ * @released_index: finger up count.
  * @debug_input: struct that used to debug input.
- * @debug_fifo: struct that used to debug input.
+ * @debug_fifo_input: kfifo struct to track recent coordinate report for input debug.
+ * @debug_hc: struct that used for the health check.
+ * @debug_fifo_hc: kfifo struct to track recent touch interrupt information for health check.
  */
 
 struct goog_touch_interface {
@@ -525,13 +541,21 @@ struct goog_touch_interface {
 	unsigned long slot_bit_active;
 	dev_t dev_id;
 
+	u64 irq_index;
+	u64 input_index;
+	irq_handler_t vendor_irq_handler;
+	irq_handler_t vendor_irq_thread_fn;
+	void *vendor_irq_cookie;
+
 	int (*vendor_default_handler)(void *private_data,
 		enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd);
 
 	/* Debug used. */
-	unsigned long released_count;
+	u64 released_index;
 	struct gti_debug_input debug_input[MAX_SLOTS];
-	DECLARE_KFIFO(debug_fifo, struct gti_debug_input, GTI_DEBUG_KFIFO_LEN);
+	DECLARE_KFIFO(debug_fifo_input, struct gti_debug_input, GTI_DEBUG_KFIFO_LEN);
+	struct gti_debug_health_check debug_hc;
+	DECLARE_KFIFO(debug_fifo_hc, struct gti_debug_health_check, GTI_DEBUG_KFIFO_LEN);
 };
 
 /*-----------------------------------------------------------------------------
@@ -557,6 +581,14 @@ inline void goog_input_report_key(
 		struct goog_touch_interface *gti,
 		struct input_dev *dev, unsigned int code, int value);
 inline void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev);
+inline int goog_devm_request_threaded_irq(struct goog_touch_interface *gti,
+		struct device *dev, unsigned int irq,
+		irq_handler_t handler, irq_handler_t thread_fn,
+		unsigned long irqflags, const char *devname,
+		void *dev_id);
+inline int goog_request_threaded_irq(struct goog_touch_interface *gti,
+		unsigned int irq, irq_handler_t handler, irq_handler_t thread_fn,
+		unsigned long irqflags, const char *devname, void *dev_id);
 
 int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type);
 int goog_input_process(struct goog_touch_interface *gti);
@@ -582,6 +614,7 @@ int goog_pm_unregister_notification(struct goog_touch_interface *gti);
 
 void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		enum gti_fw_status status, struct gti_fw_status_data* data);
+void gti_debug_hc_dump(struct goog_touch_interface *gti);
 void gti_debug_input_dump(struct goog_touch_interface *gti);
 
 #endif // _GOOG_TOUCH_INTERFACE_
