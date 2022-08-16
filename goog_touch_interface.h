@@ -463,6 +463,8 @@ struct gti_pm {
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
  * @default_grip_enabled: the grip default setting.
  * @default_palm_enabled: the palm default setting.
+ * @wakeup_before_force_active_enabled: waking up the screen to force active.
+ * @wakeup_before_force_active_delay: the ms delay after waking up screen to force active.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
@@ -508,6 +510,8 @@ struct goog_touch_interface {
 	bool input_timestamp_changed;
 	bool default_grip_enabled;
 	bool default_palm_enabled;
+	bool wakeup_before_force_active_enabled;
+	unsigned int wakeup_before_force_active_delay;
 	union {
 	u8 offload_id_byte[4];
 	u32 offload_id;
@@ -577,5 +581,7 @@ int goog_pm_unregister_notification(struct goog_touch_interface *gti);
 
 void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		enum gti_fw_status status, struct gti_fw_status_data* data);
+void gti_debug_input_dump(struct goog_touch_interface *gti);
+
 #endif // _GOOG_TOUCH_INTERFACE_
 

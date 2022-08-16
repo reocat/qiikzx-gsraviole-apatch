@@ -174,10 +174,21 @@ static ssize_t force_active_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (locked)
+	if (locked) {
+		if (gti->wakeup_before_force_active_enabled) {
+			input_report_key(gti->vendor_input_dev, KEY_WAKEUP, true);
+			input_sync(gti->vendor_input_dev);
+			input_report_key(gti->vendor_input_dev, KEY_WAKEUP, false);
+			input_sync(gti->vendor_input_dev);
+			GOOG_LOG("KEY_WAKEUP triggered with %u ms delay.\n",
+				gti->wakeup_before_force_active_delay);
+			msleep(gti->wakeup_before_force_active_delay);
+		}
+		gti_debug_input_dump(gti);
 		ret = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE, false);
-	else
+	} else {
 		ret = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
+	}
 
 	if (ret < 0) {
 		GOOG_LOG("error: %d!\n", ret);
@@ -2159,6 +2170,39 @@ static int goog_set_sensing_mode_nop(
 	return -ESRCH;
 }
 
+void goog_init_input(struct goog_touch_interface *gti)
+{
+	int i;
+
+	if (!gti)
+		return;
+
+	INIT_KFIFO(gti->debug_fifo);
+	for (i = 0 ; i < MAX_SLOTS ; i++)
+		gti->debug_input[i].slot = i;
+
+	if (gti->vendor_dev && gti->vendor_input_dev) {
+		struct device_node *np = gti->vendor_dev->of_node;
+		/*
+		 * Initialize the ABS_MT_TOOL_TYPE to support touch cancel.
+		 */
+		input_set_abs_params(gti->vendor_input_dev, ABS_MT_TOOL_TYPE,
+			MT_TOOL_FINGER, MT_TOOL_PALM, 0, 0);
+		/*
+		 * Initialize the EV_KEY capability.
+		 */
+		gti->wakeup_before_force_active_enabled =
+			of_property_read_bool(np, "goog,wakeup-before-force-active-enabled");
+		if (gti->wakeup_before_force_active_enabled) {
+			if (of_property_read_u32(np, "goog,wakeup-before-force-active-delay",
+					&gti->wakeup_before_force_active_delay)) {
+				gti->wakeup_before_force_active_delay = 50;
+			}
+			input_set_capability(gti->vendor_input_dev, EV_KEY, KEY_WAKEUP);
+		}
+	}
+}
+
 void goog_init_options(struct goog_touch_interface *gti,
 		struct gti_optional_configuration *options)
 {
@@ -2527,8 +2571,6 @@ struct goog_touch_interface *goog_touch_interface_probe(
 
 	gti = devm_kzalloc(dev, sizeof(struct goog_touch_interface), GFP_KERNEL);
 	if (gti) {
-		int i;
-
 		gti->vendor_private_data = private_data;
 		gti->vendor_dev = dev;
 		gti->vendor_input_dev = input_dev;
@@ -2539,16 +2581,9 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		goog_offload_probe(gti);
 		register_panel_bridge(gti);
 		goog_register_tbn(gti);
+		goog_init_input(gti);
 		goog_init_options(gti, options);
 		goog_update_fw_settings(gti);
-		INIT_KFIFO(gti->debug_fifo);
-		for (i = 0 ; i < MAX_SLOTS ; i++)
-			gti->debug_input[i].slot = i;
-		/*
-		 * Initialize the ABS_MT_TOOL_TYPE to support touch cancel.
-		 */
-		input_set_abs_params(input_dev, ABS_MT_TOOL_TYPE,
-			MT_TOOL_FINGER, MT_TOOL_PALM, 0, 0);
 	}
 
 	if (!gti_class)
