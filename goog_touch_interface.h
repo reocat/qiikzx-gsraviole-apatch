@@ -504,9 +504,9 @@ struct goog_touch_interface {
 
 	bool panel_is_lp_mode;
 	bool force_legacy_report;
-	bool offload_enable;
-	bool v4l2_enable;
-	bool tbn_enable;
+	bool offload_enabled;
+	bool v4l2_enabled;
+	bool tbn_enabled;
 	bool input_timestamp_changed;
 	bool default_grip_enabled;
 	bool default_palm_enabled;
