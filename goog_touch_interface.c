@@ -478,7 +478,7 @@ static ssize_t offload_enabled_show(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
 	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-		"result: %d\n", gti->offload_enable);
+		"result: %d\n", gti->offload_enabled);
 	GOOG_LOG("%s", buf);
 
 	return buf_idx;
@@ -489,12 +489,12 @@ static ssize_t offload_enabled_store(struct device *dev,
 {
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
-	if (kstrtobool(buf, &gti->offload_enable)) {
+	if (kstrtobool(buf, &gti->offload_enabled)) {
 		GOOG_LOG("error: invalid input!\n");
 	} else {
-		GOOG_LOG("offload_enable= %d\n", gti->offload_enable);
+		GOOG_LOG("offload_enabled= %d\n", gti->offload_enabled);
 		/* Force to turn off offload by request. */
-		if (!gti->offload_enable)
+		if (!gti->offload_enabled)
 			goog_offload_set_running(gti, false);
 	}
 
@@ -953,7 +953,7 @@ static ssize_t v4l2_enabled_show(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
 	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-		"result: %d\n", gti->v4l2_enable);
+		"result: %d\n", gti->v4l2_enabled);
 	GOOG_LOG("%s", buf);
 
 	return buf_idx;
@@ -964,10 +964,10 @@ static ssize_t v4l2_enabled_store(struct device *dev,
 {
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
-	if (kstrtobool(buf, &gti->v4l2_enable))
+	if (kstrtobool(buf, &gti->v4l2_enabled))
 		GOOG_LOG("error: invalid input!\n");
 	else
-		GOOG_LOG("v4l2_enable= %d\n", gti->v4l2_enable);
+		GOOG_LOG("v4l2_enabled= %d\n", gti->v4l2_enabled);
 
 	return size;
 }
@@ -1438,7 +1438,7 @@ bool goog_v4l2_read_frame_cb(struct v4l2_heatmap *v4l2)
 
 void goog_v4l2_read(struct goog_touch_interface *gti, ktime_t timestamp)
 {
-	if (gti->v4l2_enable)
+	if (gti->v4l2_enabled)
 		heatmap_read(&gti->v4l2, ktime_to_ns(timestamp));
 }
 
@@ -1761,14 +1761,14 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		goto err_offload_probe;
 	}
 
-	gti->offload_enable = of_property_read_bool(np, "goog,offload-enable");
+	gti->offload_enabled = of_property_read_bool(np, "goog,offload-enabled");
 	GOOG_LOG("offload.caps: display W/H: %d * %d (Tx/Rx: %d * %d).\n",
 		gti->offload.caps.display_width, gti->offload.caps.display_height,
 		gti->offload.caps.tx_size, gti->offload.caps.rx_size);
 
-	GOOG_LOG("offload ID: \"%c%c%c%c\" / 0x%08X, offload_enable=%d.\n",
+	GOOG_LOG("offload ID: \"%c%c%c%c\" / 0x%08X, offload_enabled=%d.\n",
 		gti->offload_id_byte[0], gti->offload_id_byte[1], gti->offload_id_byte[2],
-		gti->offload_id_byte[3], gti->offload_id, gti->offload_enable);
+		gti->offload_id_byte[3], gti->offload_id, gti->offload_enabled);
 
 	gti->default_grip_enabled = of_property_read_bool(np,
 			"goog,default-grip-disabled") ? GTI_GRIP_DISABLE : GTI_GRIP_ENABLE;
@@ -1806,9 +1806,9 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		GOOG_ERR("v4l2 init failed, ret %d!\n", ret);
 		goto err_offload_probe;
 	}
-	gti->v4l2_enable = of_property_read_bool(np, "goog,v4l2-enable");
-	GOOG_LOG("v4l2 W/H=(%lu, %lu), v4l2_enable=%d.\n",
-		gti->v4l2.width, gti->v4l2.height, gti->v4l2_enable);
+	gti->v4l2_enabled = of_property_read_bool(np, "goog,v4l2-enabled");
+	GOOG_LOG("v4l2 W/H=(%lu, %lu), v4l2_enabled=%d.\n",
+		gti->v4l2.width, gti->v4l2.height, gti->v4l2_enabled);
 
 err_offload_probe:
 	return ret;
@@ -1840,7 +1840,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 		!gti->slot_bit_changed)
 		return -EPERM;
 
-	if (gti->offload_enable) {
+	if (gti->offload_enabled) {
 		ret = touch_offload_reserve_frame(&gti->offload, frame);
 		if (ret != 0 || frame == NULL) {
 			GOOG_ERR("could not reserve a frame(ret %d)!\n", ret);
@@ -1868,7 +1868,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 	 * Otherwise, heatmap will be handled for both offload and v4l2
 	 * during goog_offload_populate_frame().
 	 */
-	if (!gti->offload.offload_running && gti->v4l2_enable) {
+	if (!gti->offload.offload_running && gti->v4l2_enabled) {
 		int ret;
 		struct gti_sensor_data_cmd *cmd = &gti->cmd.sensor_data_cmd;
 
@@ -2027,11 +2027,11 @@ void goog_register_tbn(struct goog_touch_interface *gti)
 {
 	struct device_node *np = gti->vendor_dev->of_node;
 
-	gti->tbn_enable = of_property_read_bool(np, "goog,tbn-enable");
-	if (gti->tbn_enable) {
+	gti->tbn_enabled = of_property_read_bool(np, "goog,tbn-enabled");
+	if (gti->tbn_enabled) {
 		if (register_tbn(&gti->tbn_register_mask)) {
 			GOOG_ERR("failed to register tbn context!\n");
-			gti->tbn_enable = false;
+			gti->tbn_enabled = false;
 		} else {
 			GOOG_LOG("tbn_register_mask = %#x.\n", gti->tbn_register_mask);
 		}
@@ -2634,7 +2634,7 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	if (!gti)
 		return -ENODEV;
 
-	if (gti->tbn_enable && gti->tbn_register_mask)
+	if (gti->tbn_enabled && gti->tbn_register_mask)
 		unregister_tbn(&gti->tbn_register_mask);
 
 	unregister_panel_bridge(&gti->panel_bridge);
@@ -2652,8 +2652,8 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 
 	goog_pm_remove(gti);
 
-	gti->offload_enable = false;
-	gti->v4l2_enable = false;
+	gti->offload_enabled = false;
+	gti->v4l2_enabled = false;
 	goog_offload_remove(gti);
 	heatmap_remove(&gti->v4l2);
 	devm_kfree(gti->vendor_dev, gti->heatmap_buf);
