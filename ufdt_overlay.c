@@ -609,11 +609,11 @@ struct fdt_header *ufdt_install_blob(void *blob, size_t blob_size) {
   err = fdt_check_header(pHeader);
   if (err < 0) {
     if (err == -FDT_ERR_BADVERSION) {
-      dto_error("incompatible blob version: %d, should be: %d",
+      dto_error("incompatible blob version: %d, should be: %d\n",
                 fdt_version(pHeader), FDT_LAST_SUPPORTED_VERSION);
 
     } else {
-      dto_error("error validating blob: %s", fdt_strerror(err));
+      dto_error("error validating blob: %s\n", fdt_strerror(err));
     }
     return NULL;
   }
