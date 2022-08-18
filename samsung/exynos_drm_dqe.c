@@ -175,16 +175,21 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 {
 	struct exynos_drm_pending_histogram_event *e = dqe->state.event;
 	struct drm_device *dev = dqe->decon->drm_dev;
-	u32 id = dqe->decon->id;
+	uint32_t id, crtc_id;
 
-	if (!e)
-		return;
-
-	pr_debug("Histogram event(0x%pK) will be handled\n", dqe->state.event);
-	dqe_reg_get_histogram_bins(id, &e->event.bins);
-	drm_send_event(dev, &e->base);
-	pr_debug("histogram event of decon%u signalled\n", dqe->decon->id);
-	dqe->state.event = NULL;
+	spin_lock(&dqe->state.histogram_slock);
+	crtc_id = dqe->decon->crtc->base.base.id;
+	id = dqe->decon->id;
+	e = dqe->state.event;
+	if (e) {
+		pr_debug("Histogram event(0x%pK) will be handled\n", dqe->state.event);
+		dqe_reg_get_histogram_bins(id, &e->event.bins);
+		e->event.crtc_id = crtc_id;
+		drm_send_event(dev, &e->base);
+		pr_debug("histogram event of decon%u signalled\n", dqe->decon->id);
+		dqe->state.event = NULL;
+	}
+	spin_unlock(&dqe->state.histogram_slock);
 }
 
 static void
