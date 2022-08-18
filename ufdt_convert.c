@@ -40,6 +40,8 @@ struct ufdt *ufdt_construct(void *fdtp, struct ufdt_node_pool *pool) {
   res_ufdt->mem_size_fdtps = DEFAULT_MEM_SIZE_FDTPS;
   res_ufdt->num_used_fdtps = (fdtp != NULL ? 1 : 0);
   res_ufdt->root = NULL;
+  res_ufdt->phandle_table.data = NULL;
+  res_ufdt->phandle_table.len = 0;
 
   return res_ufdt;
 
