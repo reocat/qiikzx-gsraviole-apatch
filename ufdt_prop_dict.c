@@ -62,6 +62,7 @@ static const struct fdt_property **_ufdt_prop_dict_find_index_by_name(
 static const struct fdt_property **_ufdt_prop_dict_find_index(
     struct ufdt_prop_dict *dict, const struct fdt_property *prop) {
   const char *name = fdt_string(dict->fdtp, fdt32_to_cpu(prop->nameoff));
+  if (name == NULL) return NULL;
 
   return _ufdt_prop_dict_find_index_by_name(dict, name);
 }
