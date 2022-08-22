@@ -258,14 +258,14 @@ static void set_phandle_table_entry(struct ufdt_node *node,
                                     struct ufdt_phandle_table_entry *data,
                                     int *cur) {
   if (node == NULL || ufdt_node_tag(node) != FDT_BEGIN_NODE) return;
-  int ph = ufdt_node_get_phandle(node);
+  uint32_t ph = ufdt_node_get_phandle(node);
   if (ph > 0) {
     data[*cur].phandle = ph;
     data[*cur].node = node;
     (*cur)++;
   }
   struct ufdt_node **it;
-  for_each_node(it, node) set_phandle_table_entry(*it, data, cur);
+  for_each_child(it, node) set_phandle_table_entry(*it, data, cur);
   return;
 }
 
@@ -301,6 +301,8 @@ struct ufdt *ufdt_from_fdt(void *fdtp, size_t fdt_size,
   }
 
   struct ufdt *res_tree = ufdt_construct(fdtp, pool);
+  if (res_tree == NULL) return NULL;
+
   int end_offset;
   int start_tag = fdt_next_tag(fdtp, start_offset, &end_offset);
   res_tree->root =
