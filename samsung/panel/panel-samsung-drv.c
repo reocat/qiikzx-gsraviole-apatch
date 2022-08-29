@@ -29,6 +29,7 @@
 
 #include <trace/dpu_trace.h>
 #include "../exynos_drm_connector.h"
+#include "../exynos_drm_dsim.h"
 #include "panel-samsung-drv.h"
 
 #define PANEL_ID_REG		0xA1
@@ -3209,6 +3210,14 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		/* For the case of OFF->AOD, TE2 will be updated in backlight_update_status */
 		if (ctx->panel_state == PANEL_STATE_NORMAL)
 			exynos_panel_update_te2(ctx);
+
+		if (bridge->encoder) {
+			struct dsim_device *dsim = encoder_to_dsim(bridge->encoder);
+
+			/* Enable error flag detection for the primary dsi */
+			if (dsim->irq_err_fg >= 0)
+				enable_irq(dsim->irq_err_fg);
+		}
 	}
 	mutex_unlock(&ctx->mode_lock);
 
@@ -3286,6 +3295,13 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
+		if (bridge->encoder) {
+			struct dsim_device *dsim = encoder_to_dsim(bridge->encoder);
+
+			if (dsim->irq_err_fg >= 0)
+				disable_irq_nosync(dsim->irq_err_fg);
+		}
+
 		if (exynos_conn_state->blanked_mode) {
 			/* blanked mode takes precedence over normal modeset */
 			ctx->panel_state = PANEL_STATE_BLANK;

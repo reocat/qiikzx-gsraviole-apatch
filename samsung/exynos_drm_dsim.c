@@ -1415,6 +1415,10 @@ static int dsim_parse_dt(struct dsim_device *dsim)
 		}
 	}
 
+	dsim->err_fg_gpio = of_get_named_gpio(np, "errfg-gpio", 0);
+	if (dsim->err_fg_gpio < 0)
+		dsim_debug(dsim, "failed to get ERR_FG gpio\n");
+
 	return 0;
 }
 
@@ -1601,6 +1605,75 @@ static int dsim_register_irq(struct dsim_device *dsim)
 	return 0;
 }
 
+static irqreturn_t dsim_err_fg_irq_handler(int irq, void *dev_id)
+{
+	struct dsim_device *dsim = dev_id;
+	struct decon_device *decon;
+	int recovering;
+
+	dsim_debug(dsim, "%s +\n", __func__);
+
+	decon = (struct decon_device *)dsim_get_decon(dsim);
+	if (!decon) {
+		dsim_warn(dsim, "%s: decon is NULL\n", __func__);
+		goto end_err_fg_handler;
+	}
+
+	if (decon->state != DECON_STATE_ON && decon->state != DECON_STATE_HIBERNATION) {
+		dsim_debug(dsim, "%s: decon state is %d\n", __func__, decon->state);
+		goto end_err_fg_handler;
+	}
+
+	recovering = atomic_read(&decon->recovery.recovering);
+	dsim_warn(dsim, "error flag detected (decon%d), try to recover (recovering=%d)",
+		decon->id, recovering);
+
+	decon_force_vblank_event(decon);
+	if (!recovering)
+		decon_trigger_recovery(decon);
+
+end_err_fg_handler:
+	dsim_debug(dsim, "%s -\n", __func__);
+
+	return IRQ_HANDLED;
+}
+
+static int dsim_register_err_fg_irq(struct dsim_device *dsim)
+{
+	struct device *dev = dsim->dev;
+	struct platform_device *pdev;
+	int ret, irq;
+
+	pdev = container_of(dev, struct platform_device, dev);
+	dsim->irq_err_fg = -1;
+
+	if (dsim->err_fg_gpio < 0) {
+		/* If the project doesn't specify the errfg-gpio, just return here */
+		dsim_debug(dsim, "No dedicated ERR_FG for dsim, skip irq registration\n");
+		return 0;
+	}
+
+	ret = gpio_to_irq(dsim->err_fg_gpio);
+	if (ret < 0) {
+		dsim_err(dsim, "Failed to get irq number for err_fg_gpio: %d\n", ret);
+		return ret;
+	}
+
+	irq = ret;
+	irq_set_status_flags(irq, IRQ_DISABLE_UNLAZY);
+	ret = devm_request_irq(dsim->dev, irq, dsim_err_fg_irq_handler, IRQF_TRIGGER_RISING,
+			pdev->name, dsim);
+	if (ret) {
+		dsim_err(dsim, "Request err_fg irq number(%d) failed: %d\n", irq, ret);
+		return ret;
+	}
+	disable_irq(irq);
+	dsim->irq_err_fg = irq;
+	dsim_info(dsim, "Request err_fg irq number(%d) okay\n", irq);
+
+	return ret;
+}
+
 static int dsim_get_phys(struct dsim_device *dsim)
 {
 	if (IS_ENABLED(CONFIG_BOARD_EMULATOR))
@@ -1632,6 +1705,8 @@ static int dsim_init_resources(struct dsim_device *dsim)
 	ret = dsim_register_irq(dsim);
 	if (ret)
 		goto err;
+
+	dsim_register_err_fg_irq(dsim);
 
 	ret = dsim_get_phys(dsim);
 	if (ret)

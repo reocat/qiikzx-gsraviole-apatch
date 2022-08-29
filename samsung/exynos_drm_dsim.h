@@ -76,6 +76,7 @@ struct dsim_device {
 	enum exynos_drm_output_type output_type;
 	int te_from;
 	int te_gpio;
+	int err_fg_gpio;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *te_on;
 	struct pinctrl_state *te_off;
@@ -90,6 +91,7 @@ struct dsim_device {
 #endif
 
 	int irq;
+	int irq_err_fg;
 	int id;
 	spinlock_t slock;
 	struct mutex cmd_lock;
