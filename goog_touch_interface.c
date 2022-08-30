@@ -2273,6 +2273,12 @@ void goog_init_input(struct goog_touch_interface *gti)
 	if (gti->vendor_dev && gti->vendor_input_dev) {
 		struct device_node *np = gti->vendor_dev->of_node;
 		/*
+		 * Initialize the ABS_MT_ORIENTATION to support orientation reporting.
+		 */
+		if (gti->offload.caps.rotation_reporting)
+			input_set_abs_params(gti->vendor_input_dev, ABS_MT_ORIENTATION,
+				-4096, 4096, 0, 0);
+		/*
 		 * Initialize the ABS_MT_TOOL_TYPE to support touch cancel.
 		 */
 		input_set_abs_params(gti->vendor_input_dev, ABS_MT_TOOL_TYPE,
