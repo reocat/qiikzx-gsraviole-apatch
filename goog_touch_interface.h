@@ -428,6 +428,7 @@ struct gti_pm {
 	u32 locks;
 	struct mutex lock_mutex;
 	enum gti_pm_state state;
+	bool enabled;
 
 	int (*resume)(struct device *dev);
 	int (*suspend)(struct device *dev);
