@@ -1433,6 +1433,12 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 	case GTI_CMD_SELFTEST:
 		ret = gti->options.selftest(private_data, &gti->cmd.selftest_cmd);
 		break;
+	case GTI_CMD_GET_CONTEXT_DRIVER:
+		ret = gti->options.get_context_driver(private_data, &gti->cmd.context_driver_cmd);
+		break;
+	case GTI_CMD_GET_CONTEXT_STYLUS:
+		ret = gti->options.get_context_stylus(private_data, &gti->cmd.context_stylus_cmd);
+		break;
 	case GTI_CMD_GET_FW_VERSION:
 		ret = gti->options.get_fw_version(private_data, &gti->cmd.fw_version_cmd);
 		break;
@@ -1677,6 +1683,57 @@ void goog_offload_populate_self_channel(struct goog_touch_interface *gti,
 	memcpy(self->data, buffer, size);
 }
 
+static void goog_offload_populate_driver_status_channel(
+		struct goog_touch_interface *gti,
+		struct touch_offload_frame *frame, int channel,
+		struct gti_context_driver_cmd *driver_cmd)
+{
+	struct TouchOffloadDriverStatus *ds =
+		(struct TouchOffloadDriverStatus *)frame->channel_data[channel];
+
+	memset(ds, 0, frame->channel_data_size[channel]);
+	ds->header.channel_type = (u32)CONTEXT_CHANNEL_TYPE_DRIVER_STATUS;
+	ds->header.channel_size = sizeof(struct TouchOffloadDriverStatus);
+
+	ds->contents.screen_state = driver_cmd->contents.screen_state;
+	ds->screen_state = driver_cmd->screen_state;
+
+	ds->contents.display_refresh_rate =
+			driver_cmd->contents.display_refresh_rate;
+	ds->display_refresh_rate = driver_cmd->display_refresh_rate;
+
+	ds->contents.touch_report_rate = driver_cmd->contents.touch_report_rate;
+	ds->touch_report_rate = driver_cmd->touch_report_rate;
+
+	ds->contents.offload_timestamp = driver_cmd->contents.offload_timestamp;
+	ds->offload_timestamp = driver_cmd->offload_timestamp;
+}
+
+static void goog_offload_populate_stylus_status_channel(
+		struct goog_touch_interface *gti,
+		struct touch_offload_frame *frame, int channel,
+		struct gti_context_stylus_cmd *stylus_cmd)
+{
+	struct TouchOffloadStylusStatus *ss =
+		(struct TouchOffloadStylusStatus *)frame->channel_data[channel];
+
+	memset(ss, 0, frame->channel_data_size[channel]);
+	ss->header.channel_type = (u32)CONTEXT_CHANNEL_TYPE_STYLUS_STATUS;
+	ss->header.channel_size = sizeof(struct TouchOffloadStylusStatus);
+
+	ss->contents.coords = stylus_cmd->contents.coords;
+	ss->coords[0] = stylus_cmd->pen_offload_coord;
+
+	ss->contents.coords_timestamp = stylus_cmd->contents.coords_timestamp;
+	ss->coords_timestamp = stylus_cmd->pen_offload_coord_timestamp;
+
+	ss->contents.pen_paired = stylus_cmd->contents.pen_paired;
+	ss->pen_paired = stylus_cmd->pen_paired;
+
+	ss->contents.pen_active = stylus_cmd->contents.pen_active;
+	ss->pen_active = stylus_cmd->pen_active;
+}
+
 void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame)
 {
@@ -1708,7 +1765,23 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		ret = 0;
 		cmd->buffer = NULL;
 		cmd->size = 0;
-		if (channel_type == TOUCH_DATA_TYPE_COORD) {
+		if (channel_type == CONTEXT_CHANNEL_TYPE_DRIVER_STATUS) {
+			ATRACE_BEGIN("populate driver context");
+			ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_CONTEXT_DRIVER);
+			if (ret == 0)
+				goog_offload_populate_driver_status_channel(
+						gti, frame, i,
+						&gti->cmd.context_driver_cmd);
+			ATRACE_END();
+		} else if (channel_type == CONTEXT_CHANNEL_TYPE_STYLUS_STATUS) {
+			ATRACE_BEGIN("populate stylus context");
+			ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_CONTEXT_STYLUS);
+			if (ret == 0)
+				goog_offload_populate_stylus_status_channel(
+						gti, frame, i,
+						&gti->cmd.context_stylus_cmd);
+			ATRACE_END();
+		} else if (channel_type == TOUCH_DATA_TYPE_COORD) {
 			ATRACE_BEGIN("populate coord");
 			goog_offload_populate_coordinate_channel(gti, frame, i);
 			ATRACE_END();
@@ -1735,6 +1808,8 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 					cmd->buffer, cmd->size);
 			}
 			ATRACE_END();
+		} else {
+			GOOG_ERR("%s - unrecognized channel_type = %u\n", __func__, channel_type);
 		}
 
 		if (ret) {
@@ -1917,9 +1992,14 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload.caps.touch_scan_types =
 			TOUCH_SCAN_TYPE_MUTUAL;
 	}
-	GOOG_INFO("offload.caps: data_types %#x, scan_types %#x.\n",
+	if (of_property_read_u16(np, "goog,offload-caps-context-channel-types",
+			&gti->offload.caps.context_channel_types)) {
+		gti->offload.caps.context_channel_types = 0;
+	}
+	GOOG_INFO("offload.caps: data_types %#x, scan_types %#x, context_channel_types %#x.\n",
 		gti->offload.caps.touch_data_types,
-		gti->offload.caps.touch_scan_types);
+		gti->offload.caps.touch_scan_types,
+		gti->offload.caps.context_channel_types);
 
 	gti->offload.caps.continuous_reporting = true;
 	gti->offload.caps.noise_reporting = false;
@@ -2224,6 +2304,18 @@ void goog_register_tbn(struct goog_touch_interface *gti)
 	}
 }
 
+static int goog_get_context_driver_nop(
+		void *private_data, struct gti_context_driver_cmd *cmd)
+{
+	return -ESRCH;
+}
+
+static int goog_get_context_stylus_nop(
+		void *private_data, struct gti_context_stylus_cmd *cmd)
+{
+	return -ESRCH;
+}
+
 static int goog_get_fw_version_nop(
 		void *private_data, struct gti_fw_version_cmd *cmd)
 {
@@ -2431,6 +2523,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 		struct gti_optional_configuration *options)
 {
 	/* Initialize default functions. */
+	gti->options.get_context_driver = goog_get_context_driver_nop;
+	gti->options.get_context_stylus = goog_get_context_stylus_nop;
 	gti->options.get_fw_version = goog_get_fw_version_nop;
 	gti->options.get_grip_mode = goog_get_grip_mode_nop;
 	gti->options.get_irq_mode = goog_get_irq_mode_nop;
@@ -2456,6 +2550,10 @@ void goog_init_options(struct goog_touch_interface *gti,
 
 	/* Set optional operation if available. */
 	if (options) {
+		if (options->get_context_driver)
+			gti->options.get_context_driver = options->get_context_driver;
+		if (options->get_context_stylus)
+			gti->options.get_context_stylus = options->get_context_stylus;
 		if (options->get_fw_version)
 			gti->options.get_fw_version = options->get_fw_version;
 		if (options->get_grip_mode)

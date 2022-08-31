@@ -47,6 +47,8 @@ enum gti_cmd_type : u32 {
 
 	/* GTI_CMD_GET operations. */
 	GTI_CMD_GET_OPS_START = 0x200,
+	GTI_CMD_GET_CONTEXT_DRIVER,
+	GTI_CMD_GET_CONTEXT_STYLUS,
 	GTI_CMD_GET_FW_VERSION,
 	GTI_CMD_GET_GRIP_MODE,
 	GTI_CMD_GET_IRQ_MODE,
@@ -243,6 +245,42 @@ enum gti_noise_mode_level : u8 {
  * Structures.
  */
 
+struct gti_context_driver_cmd {
+	struct {
+		u32 screen_state : 1;
+		u32 display_refresh_rate : 1;
+		u32 touch_report_rate : 1;
+		u32 noise_state : 1;
+		u32 water_mode : 1;
+		u32 charger_state : 1;
+		u32 hinge_angle : 1;
+		u32 offload_timestamp : 1;
+	} contents;
+
+	u8 screen_state;
+	u8 display_refresh_rate;
+	u8 touch_report_rate;
+	u8 noise_state;
+	u8 water_mode;
+	u8 charger_state;
+	s16 hinge_angle;
+
+	ktime_t offload_timestamp;
+};
+
+struct gti_context_stylus_cmd {
+	struct {
+		u32 coords : 1;
+		u32 coords_timestamp : 1;
+		u32 pen_paired : 1;
+		u32 pen_active : 1;
+	} contents;
+	struct TouchOffloadCoord pen_offload_coord;
+	ktime_t pen_offload_coord_timestamp;
+	u8 pen_paired;
+	u8 pen_active;
+};
+
 struct gti_continuous_report_cmd {
 	enum gti_continuous_report_setting setting;
 };
@@ -327,6 +365,8 @@ struct gti_sensor_data_cmd {
 
 /**
  * struct gti_union_cmd_data - GTI commands to vendor driver.
+ * @context_driver_cmd: command to update touch offload driver context.
+ * @context_stylus_cmd: command to update touch offload stylus context.
  * @continuous_report_cmd: command to set continuous reporting.
  * @display_state_cmd: command to notify display state.
  * @display_vrefresh_cmd: command to notify display vertical refresh rate.
@@ -345,6 +385,8 @@ struct gti_sensor_data_cmd {
  * @manual_sensor_data_cmd: command to get sensor data manually.
  */
 struct gti_union_cmd_data {
+	struct gti_context_driver_cmd context_driver_cmd;
+	struct gti_context_stylus_cmd context_stylus_cmd;
 	struct gti_continuous_report_cmd continuous_report_cmd;
 	struct gti_display_state_cmd display_state_cmd;
 	struct gti_display_vrefresh_cmd display_vrefresh_cmd;
@@ -373,6 +415,8 @@ struct gti_fw_status_data {
 
 /**
  * struct gti_optional_configuration - optional configuration by vendor driver.
+ * @get_context_driver: vendor driver operation to update touch offload driver context.
+ * @get_context_stylus: vendor driver operation to update touch offload stylus context.
  * @get_fw_version: vendor driver operation to get fw version info.
  * @get_grip_mode: vendor driver operation to get the grip mode setting.
  * @get_irq_mode: vendor driver operation to get irq mode setting.
@@ -397,6 +441,8 @@ struct gti_fw_status_data {
  * @set_sensing_mode: vendor driver operation to set sensing mode.
  */
 struct gti_optional_configuration {
+	int (*get_context_driver)(void *private_data, struct gti_context_driver_cmd *cmd);
+	int (*get_context_stylus)(void *private_data, struct gti_context_stylus_cmd *cmd);
 	int (*get_fw_version)(void *private_data, struct gti_fw_version_cmd *cmd);
 	int (*get_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
 	int (*get_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);

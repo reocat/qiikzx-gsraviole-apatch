@@ -326,7 +326,7 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 			if (!(context->config.context_channel_types & mask))
 				continue;
 
-			frame->channel_type[chan] = mask;
+			frame->channel_type[chan] = (__u32)mask;
 			size = 0;
 			switch (mask) {
 			case CONTEXT_CHANNEL_TYPE_DRIVER_STATUS:
@@ -338,7 +338,7 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 				    TOUCH_OFFLOAD_FRAME_SIZE_STYLUS_STATUS;
 				break;
 			default:
-				pr_err("%s: Invalid channel_type = 0x%08X",
+				pr_err("%s: Invalid channel_type = 0x%08X\n",
 					__func__, mask);
 				goto invalid_context_channel;
 			}
@@ -350,7 +350,7 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 			chan_header =
 				(struct TouchOffloadChannelHeader *)
 					frame->channel_data[chan];
-			chan_header->channel_type = mask;
+			chan_header->channel_type = (__u32)mask;
 			chan_header->channel_size = size;
 			frame->channel_data_size[chan] = size;
 			frame->header.frame_size += size;
