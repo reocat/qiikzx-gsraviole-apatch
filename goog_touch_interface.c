@@ -1786,7 +1786,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload.caps.display_width = values[0];
 		gti->offload.caps.display_height = values[1];
 	} else {
-		GOOG_ERR("Plesae set \"goog,display-resolution\" in dts!");
+		GOOG_ERR("Please set \"goog,display-resolution\" in dts!");
 	}
 
 	if (of_property_read_u16_array(np, "goog,channel-num",
@@ -1794,7 +1794,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload.caps.tx_size = values[0];
 		gti->offload.caps.rx_size = values[1];
 	} else {
-		GOOG_ERR("Plesae set \"goog,channel-num\" in dts!");
+		GOOG_ERR("Please set \"goog,channel-num\" in dts!");
 		ret = -EINVAL;
 		goto err_offload_probe;
 	}
@@ -2272,17 +2272,48 @@ void goog_init_input(struct goog_touch_interface *gti)
 
 	if (gti->vendor_dev && gti->vendor_input_dev) {
 		struct device_node *np = gti->vendor_dev->of_node;
+
 		/*
 		 * Initialize the ABS_MT_ORIENTATION to support orientation reporting.
+		 * Initialize the ABS_MT_TOUCH_MAJOR and ABS_MT_TOUCH_MINOR depending on
+		 * the larger values of ABS_MT_POSITION_X and ABS_MT_POSITION_Y to support
+		 * shape algo reporting.
 		 */
-		if (gti->offload.caps.rotation_reporting)
+		if (gti->offload.caps.rotation_reporting) {
+			int abs_x_max = input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_X);
+			int abs_x_min = input_abs_get_min(gti->vendor_input_dev, ABS_MT_POSITION_X);
+			int abs_x_res = input_abs_get_res(gti->vendor_input_dev, ABS_MT_POSITION_X);
+			int abs_y_max = input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_Y);
+			int abs_y_min = input_abs_get_min(gti->vendor_input_dev, ABS_MT_POSITION_Y);
+			int abs_y_res = input_abs_get_res(gti->vendor_input_dev, ABS_MT_POSITION_Y);
+			int abs_major_max = abs_x_max;
+			int abs_major_min = abs_x_min;
+			int abs_major_res = abs_x_res;
+			int abs_minor_max = abs_y_max;
+			int abs_minor_min = abs_y_min;
+			int abs_minor_res = abs_y_res;
+
+			if (abs_x_max < abs_y_max) {
+				swap(abs_major_max, abs_minor_max);
+				swap(abs_major_min, abs_minor_min);
+				swap(abs_major_res, abs_minor_res);
+			}
 			input_set_abs_params(gti->vendor_input_dev, ABS_MT_ORIENTATION,
 				-4096, 4096, 0, 0);
+			input_set_abs_params(gti->vendor_input_dev, ABS_MT_TOUCH_MAJOR,
+				abs_major_min, abs_major_max, 0, 0);
+			input_set_abs_params(gti->vendor_input_dev, ABS_MT_TOUCH_MINOR,
+				abs_minor_min, abs_minor_max, 0, 0);
+			input_abs_set_res(gti->vendor_input_dev, ABS_MT_TOUCH_MAJOR, abs_major_res);
+			input_abs_set_res(gti->vendor_input_dev, ABS_MT_TOUCH_MINOR, abs_minor_res);
+		}
+
 		/*
 		 * Initialize the ABS_MT_TOOL_TYPE to support touch cancel.
 		 */
 		input_set_abs_params(gti->vendor_input_dev, ABS_MT_TOOL_TYPE,
 			MT_TOOL_FINGER, MT_TOOL_PALM, 0, 0);
+
 		/*
 		 * Initialize the EV_KEY capability.
 		 */
