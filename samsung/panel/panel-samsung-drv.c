@@ -914,6 +914,8 @@ static int exynos_update_status(struct backlight_device *bl)
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
 
+	min_brightness =
+		ctx->desc->lower_min_brightness ? ctx->desc->lower_min_brightness : min_brightness;
 	if (brightness && brightness < min_brightness)
 		brightness = min_brightness;
 
@@ -2846,6 +2848,17 @@ static ssize_t te2_state_show(struct device *dev,
 
 static DEVICE_ATTR_RO(te2_state);
 
+static ssize_t dim_brightness_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->desc->lower_min_brightness);
+}
+
+static DEVICE_ATTR_RO(dim_brightness);
+
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len)
 {
 	int rc = 0, cnt = 0;
@@ -2953,6 +2966,7 @@ static struct attribute *bl_device_attrs[] = {
 	&dev_attr_dimming_on.attr,
 	&dev_attr_local_hbm_mode.attr,
 	&dev_attr_local_hbm_max_timeout.attr,
+	&dev_attr_dim_brightness.attr,
 	&dev_attr_state.attr,
 	&dev_attr_lp_state.attr,
 	&dev_attr_te2_state.attr,
