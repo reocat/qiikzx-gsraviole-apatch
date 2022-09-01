@@ -52,7 +52,7 @@ static const struct fdt_property **_ufdt_prop_dict_find_index_by_name(
     if (prop == NULL) return prop_ptr;
 
     const char *prop_name = fdt_string(dict->fdtp, fdt32_to_cpu(prop->nameoff));
-    if (dto_strcmp(prop_name, name) == 0) return prop_ptr;
+    if (prop_name != NULL && dto_strcmp(prop_name, name) == 0) return prop_ptr;
 
     idx = (idx + 1) & (size - 1);
   }
