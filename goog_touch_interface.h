@@ -561,7 +561,7 @@ struct goog_touch_interface {
 /*-----------------------------------------------------------------------------
  * Forward declarations.
  */
-
+inline bool goog_check_spi_dma_enabled(struct spi_device *spi_dev);
 inline bool goog_input_legacy_report(struct goog_touch_interface *gti);
 inline void goog_input_lock(struct goog_touch_interface *gti);
 inline void goog_input_unlock(struct goog_touch_interface *gti);

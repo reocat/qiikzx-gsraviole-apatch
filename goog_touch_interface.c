@@ -1346,6 +1346,24 @@ static void unregister_panel_bridge(struct drm_bridge *bridge)
 /*-----------------------------------------------------------------------------
  * GTI: functions.
  */
+bool goog_check_spi_dma_enabled(struct spi_device *spi_dev)
+{
+	bool ret = false;
+
+	if (spi_dev && spi_dev->controller) {
+		struct device_node *np = spi_dev->controller->dev.of_node;
+
+		/*
+		 * Check the SPI controller(s3c64xx-spi) whether support DMA
+		 * or not.
+		 */
+		ret = of_property_read_bool(np, "dma-mode");
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(goog_check_spi_dma_enabled);
+
 int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type)
 {
 	void *private_data = gti->vendor_private_data;
