@@ -2709,6 +2709,7 @@ static irqreturn_t gti_irq_thread_fn(int irq, void *data)
 		ret = gti->vendor_irq_thread_fn(irq, gti->vendor_irq_cookie);
 	else
 		ret = IRQ_HANDLED;
+	goog_input_process(gti);
 	gti_debug_hc_update(gti, false);
 	ATRACE_END();
 
