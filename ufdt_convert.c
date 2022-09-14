@@ -196,13 +196,21 @@ struct ufdt_node *ufdt_get_node_by_path_len(struct ufdt *tree, const char *path,
     const char *alias_path =
         ufdt_node_get_fdt_prop_data(aliases_node, &path_len);
 
-    if (alias_path == NULL) {
-      dto_error("Failed to find alias %s\n", path);
+    if (alias_path == NULL || path_len == 0) {
+      dto_error("Failed to find valid alias %s\n", path);
+      return NULL;
+    }
+
+    /* property data must be a nul terminated string */
+    int alias_len = strnlen(alias_path, path_len);
+
+    if (alias_len != path_len - 1 || alias_len == 0) {
+      dto_error("Invalid alias for %s\n", path);
       return NULL;
     }
 
     struct ufdt_node *target_node =
-        ufdt_node_get_node_by_path_len(tree->root, alias_path, path_len);
+        ufdt_node_get_node_by_path_len(tree->root, alias_path, alias_len);
 
     return ufdt_node_get_node_by_path_len(target_node, next_slash,
                                           end - next_slash);
