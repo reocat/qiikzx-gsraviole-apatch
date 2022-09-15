@@ -12,6 +12,7 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <linux/kfifo.h>
+#include <linux/pm_qos.h>
 
 #include "heatmap.h"
 #include "touch_offload.h"
@@ -465,6 +466,7 @@ struct gti_pm {
  * @screen_protector_mode_setting: the setting of screen protector mode.
  * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
  * @pm: struct that used by gti pm.
+ * @pm_qos_req: struct that used by pm qos.
  * @panel_is_lp_mode: display is in low power mode.
  * @force_legacy_report: force to directly report input by kernel input API.
  * @offload_enable: touch offload is enabled or not.
@@ -518,6 +520,7 @@ struct goog_touch_interface {
 	enum gti_screen_protector_mode screen_protector_mode_setting;
 	u32 tbn_register_mask;
 	struct gti_pm pm;
+	struct pm_qos_request pm_qos_req;
 
 	bool panel_is_lp_mode;
 	bool force_legacy_report;
