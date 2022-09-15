@@ -2693,6 +2693,8 @@ static int goog_pm_probe(struct goog_touch_interface *gti)
 	init_completion(&pm->bus_resumed);
 	complete_all(&pm->bus_resumed);
 
+	/* init pm_qos. */
+	cpu_latency_qos_add_request(&gti->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	pm->enabled = true;
 
 	return ret;
@@ -2704,9 +2706,13 @@ err_alloc_workqueue:
 static int goog_pm_remove(struct goog_touch_interface *gti)
 {
 	struct gti_pm* pm = &gti->pm;
-	pm->enabled = false;
-	if (pm->event_wq)
-		destroy_workqueue(pm->event_wq);
+
+	if (pm->enabled) {
+		pm->enabled = false;
+		cpu_latency_qos_remove_request(&gti->pm_qos_req);
+		if (pm->event_wq)
+			destroy_workqueue(pm->event_wq);
+	}
 	return 0;
 }
 
@@ -2730,12 +2736,14 @@ static irqreturn_t gti_irq_thread_fn(int irq, void *data)
 	struct goog_touch_interface *gti = (struct goog_touch_interface *)data;
 
 	ATRACE_BEGIN(__func__);
+	cpu_latency_qos_update_request(&gti->pm_qos_req, 100 /* usec */);
 	if (gti->vendor_irq_thread_fn)
 		ret = gti->vendor_irq_thread_fn(irq, gti->vendor_irq_cookie);
 	else
 		ret = IRQ_HANDLED;
 	goog_input_process(gti);
 	gti_debug_hc_update(gti, false);
+	cpu_latency_qos_update_request(&gti->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	ATRACE_END();
 
 	return ret;
