@@ -300,9 +300,16 @@ struct ufdt *ufdt_from_fdt(void *fdtp, size_t fdt_size,
     return ufdt_construct(NULL, pool);
   }
 
-  struct ufdt *res_tree = ufdt_construct(fdtp, pool);
   int end_offset;
   int start_tag = fdt_next_tag(fdtp, start_offset, &end_offset);
+
+  if (start_tag != FDT_BEGIN_NODE) {
+    return ufdt_construct(NULL, pool);
+  }
+
+  struct ufdt *res_tree = ufdt_construct(fdtp, pool);
+  if (res_tree == NULL) return NULL;
+
   res_tree->root =
       fdt_to_ufdt_tree(fdtp, start_offset, &end_offset, start_tag, pool);
 
