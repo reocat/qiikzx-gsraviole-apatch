@@ -54,6 +54,7 @@ enum gti_cmd_type : u32 {
 	GTI_CMD_GET_SCREEN_PROTECTOR_MODE,
 	GTI_CMD_GET_SENSING_MODE,
 	GTI_CMD_GET_SENSOR_DATA,
+	GTI_CMD_GET_SENSOR_DATA_MANUAL,
 
 	/* GTI_CMD_NOTIFY operations. */
 	GTI_CMD_NOTIFY_OPS_START = 0x300,
@@ -340,6 +341,7 @@ struct gti_sensor_data_cmd {
  * @selftest_cmd: command to do self-test.
  * @sensing_cmd: command to set/set sensing mode.
  * @sensor_data_cmd: command to get sensor data.
+ * @manual_sensor_data_cmd: command to get sensor data manually.
  */
 struct gti_union_cmd_data {
 	struct gti_continuous_report_cmd continuous_report_cmd;
@@ -357,6 +359,7 @@ struct gti_union_cmd_data {
 	struct gti_selftest_cmd selftest_cmd;
 	struct gti_sensing_cmd sensing_cmd;
 	struct gti_sensor_data_cmd sensor_data_cmd;
+	struct gti_sensor_data_cmd manual_sensor_data_cmd;
 };
 
 /**
@@ -452,6 +455,7 @@ struct gti_pm {
  * @dev: pointer to struct device that used by google touch interface driver.
  * @options: optional configuration that could apply by vendor driver.
  * @input_lock: protect the input report between non-offload and offload.
+ * @manual_sensing_lock: protect the input manual_sensor_data_cmd.
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
@@ -505,6 +509,7 @@ struct goog_touch_interface {
 	struct device *dev;
 	struct gti_optional_configuration options;
 	struct mutex input_lock;
+	struct mutex manual_sensing_lock;
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
