@@ -473,7 +473,9 @@ struct gti_pm {
  * @v4l2_enable: v4l2 is enabled or not.
  * @tbn_enable: tbn is enabled or not.
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
+ * @ignore_grip_update: Ignore fw_grip status updates made on offload state change.
  * @default_grip_enabled: the grip default setting.
+ * @ignore_palm_update: Ignore fw_palm status updates made on offload state change.
  * @default_palm_enabled: the palm default setting.
  * @wakeup_before_force_active_enabled: waking up the screen to force active.
  * @wakeup_before_force_active_delay: the ms delay after waking up screen to force active.
@@ -528,7 +530,9 @@ struct goog_touch_interface {
 	bool v4l2_enabled;
 	bool tbn_enabled;
 	bool input_timestamp_changed;
+	bool ignore_grip_update;
 	bool default_grip_enabled;
+	bool ignore_palm_update;
 	bool default_palm_enabled;
 	bool wakeup_before_force_active_enabled;
 	unsigned int wakeup_before_force_active_delay;
