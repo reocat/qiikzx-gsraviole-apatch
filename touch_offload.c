@@ -657,8 +657,6 @@ int touch_offload_init(struct touch_offload_context *context)
 {
 	int ret = 0;
 
-	pr_debug("%s\n", __func__);
-
 	/* Initialize ioctl interface */
 	context->file_in_use = false;
 	mutex_init(&context->file_lock);
@@ -675,8 +673,10 @@ int touch_offload_init(struct touch_offload_context *context)
 	init_completion(&context->reserve_returned);
 	complete_all(&context->reserve_returned);
 
-	if (!context->multiple_panels)
-		scnprintf(context->device_name, 32, "%s", DEVICE_NAME);
+	if (!strnlen(context->device_name, sizeof(context->device_name)))
+		scnprintf(context->device_name, sizeof(context->device_name), "%s", DEVICE_NAME);
+
+	pr_info("%s: %s.\n", __func__, context->device_name);
 
 	/* Initialize char device */
 	context->major_num = register_chrdev(0, context->device_name,

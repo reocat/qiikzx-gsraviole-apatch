@@ -1848,6 +1848,15 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	int ret;
 	u16 values[2];
 	struct device_node *np = gti->vendor_dev->of_node;
+	const char *dev_name = NULL;
+
+	/*
+	 * TODO(b/201610482): rename DEVICE_NAME in touch_offload.h for more specific.
+	 */
+	if (!of_property_read_string(np, "goog,offload-device-name", &dev_name)) {
+		scnprintf(gti->offload.device_name, sizeof(gti->offload.device_name),
+			"%s_%s", DEVICE_NAME, dev_name);
+	}
 
 	if (of_property_read_u8_array(np, "goog,touch_offload_id",
 					  gti->offload_id_byte, 4)) {
