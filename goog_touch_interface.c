@@ -1675,6 +1675,7 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame)
 {
 	static u64 index;
+	char trace_tag[128];
 	u32 channel_type;
 	int i;
 	int ret;
@@ -1682,10 +1683,11 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	u16 rx = gti->offload.caps.rx_size;
 	struct gti_sensor_data_cmd *cmd = &gti->cmd.sensor_data_cmd;
 
+	scnprintf(trace_tag, sizeof(trace_tag), "%s: index=%llu\n", __func__, index);
+	ATRACE_BEGIN(trace_tag);
+
 	frame->header.index = index++;
 	frame->header.timestamp = gti->input_timestamp;
-
-	ATRACE_BEGIN(__func__);
 
 	/*
 	 * TODO(b/201610482):
