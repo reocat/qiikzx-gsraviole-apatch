@@ -989,7 +989,7 @@ static void _decon_mode_update_bts_handover(struct decon_device *decon,
 		config->dst_w = mode->hdisplay;
 		config->dst_h = mode->vdisplay;
 		config->format = DRM_FORMAT_ARGB8888;
-		config->dpp_ch = dpp->id;
+		config->dpp_id = dpp->id;
 		j++;
 	}
 }
