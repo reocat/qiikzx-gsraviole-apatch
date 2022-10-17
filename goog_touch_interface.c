@@ -1717,6 +1717,8 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
 {
 	if (gti->offload.offload_running != running) {
+		GOOG_INFO("Set offload_running=%d, irq_index=%d, input_index=%d\n",
+			running, gti->irq_index, gti->input_index);
 		gti->offload.offload_running = running;
 		goog_update_fw_settings(gti);
 	}
@@ -1956,7 +1958,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 	if (gti->offload_enabled) {
 		ret = touch_offload_reserve_frame(&gti->offload, frame);
 		if (ret != 0 || frame == NULL) {
-			GOOG_ERR("could not reserve a frame(ret %d)!\n", ret);
+			GOOG_DBG("could not reserve a frame(ret %d)!\n", ret);
 			/* Stop offload when there are no buffers available. */
 			goog_offload_set_running(gti, false);
 			/*
