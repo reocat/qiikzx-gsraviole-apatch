@@ -390,12 +390,14 @@ static ssize_t ms_base_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
 			"error: %d!\n", ret);
 	} else {
+		u8 width = GTI_SENSOR_2D_OUT_FORMAT_WIDTH(cmd->size);
+
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
 		if (cmd->buffer && cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 			for (y = 0; y < rx; y++) {
 				for (x = 0; x < tx; x++) {
 					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-							"%5d,", ((s16 *)cmd->buffer)[y * tx + x]);
+						"%*d,", width, ((s16 *)cmd->buffer)[y * tx + x]);
 				}
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\n");
 			}
@@ -436,12 +438,14 @@ static ssize_t ms_diff_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
 			"error: %d!\n", ret);
 	} else {
+		u8 width = GTI_SENSOR_2D_OUT_FORMAT_WIDTH(cmd->size);
+
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
 		if (cmd->buffer && cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 			for (y = 0; y < rx; y++) {
 				for (x = 0; x < tx; x++) {
 					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-							"%5d,", ((s16 *)cmd->buffer)[y * tx + x]);
+						"%*d,", width, ((s16 *)cmd->buffer)[y * tx + x]);
 				}
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\n");
 			}
@@ -482,12 +486,14 @@ static ssize_t ms_raw_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
 			"error: %d!\n", ret);
 	} else {
+		u8 width = GTI_SENSOR_2D_OUT_FORMAT_WIDTH(cmd->size);
+
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
 		if (cmd->buffer && cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 			for (y = 0; y < rx; y++) {
 				for (x = 0; x < tx; x++) {
 					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-							"%5d,", ((s16 *)cmd->buffer)[y * tx + x]);
+						"%*d,", width, ((s16 *)cmd->buffer)[y * tx + x]);
 				}
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\n");
 			}
@@ -831,7 +837,7 @@ static ssize_t ss_base_show(struct device *dev,
 	} else {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
 		if (cmd->buffer &&
-				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
+				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "TX:");
 			for (x = 0; x < tx; x++) {
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
@@ -882,7 +888,7 @@ static ssize_t ss_diff_show(struct device *dev,
 	} else {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
 		if (cmd->buffer &&
-				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
+				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "TX:");
 			for (x = 0; x < tx; x++) {
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
@@ -933,7 +939,7 @@ static ssize_t ss_raw_show(struct device *dev,
 	} else {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
 		if (cmd->buffer &&
-				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
+				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "TX:");
 			for (x = 0; x < tx; x++) {
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,

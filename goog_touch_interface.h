@@ -33,6 +33,7 @@
 #define KTIME_RELEASE_ALL (ktime_set(0, 0))
 #define GTI_DEBUG_KFIFO_LEN 4 /* must be power of 2. */
 
+#define GTI_SENSOR_2D_OUT_FORMAT_WIDTH(size) ((size > (PAGE_SIZE * sizeof(s16) / 6)) ? 1 : 5)
 /*-----------------------------------------------------------------------------
  * enums.
  */
