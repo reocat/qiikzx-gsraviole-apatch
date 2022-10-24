@@ -67,7 +67,7 @@ struct touch_offload_context {
 	struct file file;
 	struct mutex file_lock;
 	bool file_in_use;
-	bool multiple_panels;
+	bool multiple_panels;	/* TODO(b/201610482): remove this variable later! */
 	char device_name[32];
 
 	/* touch capabilities */
