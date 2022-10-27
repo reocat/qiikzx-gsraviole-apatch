@@ -34,7 +34,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/console.h>
 #include <linux/iommu.h>
-#include <trace/dpu_trace.h>
 #include <uapi/linux/sched/types.h>
 
 #include <soc/google/exynos-cpupm.h>
@@ -303,6 +302,7 @@ static void decon_update_dsi_config(struct decon_config *config,
 						       config->dsc.slice_count);
 		config->dsc.cfg = exynos_mode->dsc.cfg;
 		config->dsc.delay_reg_init_us = exynos_mode->dsc.delay_reg_init_us;
+		config->dsc.is_scrv4 = exynos_mode->dsc.is_scrv4;
 	}
 
 	is_vid_mode = (exynos_mode->mode_flags & MIPI_DSI_MODE_VIDEO) != 0;

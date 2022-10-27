@@ -29,6 +29,7 @@
 
 #include <trace/dpu_trace.h>
 #include "../exynos_drm_connector.h"
+#include "../exynos_drm_dsim.h"
 #include "panel-samsung-drv.h"
 
 #define PANEL_ID_REG		0xA1
@@ -676,6 +677,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->panel_idle_vrefresh = 0;
 	ctx->current_binned_lp = NULL;
 	ctx->cabc_mode = CABC_OFF;
+	ctx->current_cabc_mode = CABC_OFF;
 
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
@@ -851,6 +853,26 @@ static int exynos_get_brightness(struct backlight_device *bl)
 	return bl->props.brightness;
 }
 
+static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mode cabc_mode)
+{
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	struct backlight_device *bl = ctx->bl;
+	u8 mode;
+	bool force_off = (bl->props.brightness <= ctx->desc->min_brightness);
+
+	if (!funcs || !funcs->set_cabc_mode)
+		return;
+
+	/* force off will not change the cabc_mode node */
+	mode = !force_off ? cabc_mode : CABC_OFF;
+	if (ctx->current_cabc_mode != mode) {
+		funcs->set_cabc_mode(ctx, mode);
+		ctx->current_cabc_mode = mode;
+	}
+	ctx->cabc_mode = cabc_mode;
+	dev_dbg(ctx->dev, "set cabc mode: %d, force_off: %d\n", cabc_mode, force_off);
+}
+
 static int exynos_bl_find_range(struct exynos_panel *ctx,
 				int brightness, u32 *range)
 {
@@ -893,6 +915,8 @@ static int exynos_update_status(struct backlight_device *bl)
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
 
+	min_brightness =
+		ctx->desc->lower_min_brightness ? ctx->desc->lower_min_brightness : min_brightness;
 	if (brightness && brightness < min_brightness)
 		brightness = min_brightness;
 
@@ -923,6 +947,9 @@ static int exynos_update_status(struct backlight_device *bl)
 		dev_dbg(ctx->dev, "bl range is changed to %d\n",
 			ctx->bl_notifier.current_range);
 	}
+
+	if (ctx->cabc_mode && brightness)
+		exynos_panel_set_cabc(ctx, ctx->cabc_mode);
 	mutex_unlock(&ctx->mode_lock);
 	return 0;
 }
@@ -1671,20 +1698,6 @@ static void exynos_panel_set_dimming(struct exynos_panel *ctx, bool dimming_on)
 		funcs->set_dimming_on(ctx, dimming_on);
 		panel_update_idle_mode_locked(ctx);
 	}
-	mutex_unlock(&ctx->mode_lock);
-}
-
-static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mode cabc_mode)
-{
-	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
-
-	if (!funcs || !funcs->set_cabc_mode)
-		return;
-
-	mutex_lock(&ctx->mode_lock);
-	if (cabc_mode != ctx->cabc_mode)
-		funcs->set_cabc_mode(ctx, cabc_mode);
-
 	mutex_unlock(&ctx->mode_lock);
 }
 
@@ -2556,7 +2569,9 @@ static ssize_t cabc_mode_store(struct device *dev, struct device_attribute *attr
 		return -EINVAL;
 	}
 
+	mutex_lock(&ctx->mode_lock);
 	exynos_panel_set_cabc(ctx, cabc_mode);
+	mutex_unlock(&ctx->mode_lock);
 
 	return count;
 }
@@ -2834,6 +2849,17 @@ static ssize_t te2_state_show(struct device *dev,
 
 static DEVICE_ATTR_RO(te2_state);
 
+static ssize_t dim_brightness_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->desc->lower_min_brightness);
+}
+
+static DEVICE_ATTR_RO(dim_brightness);
+
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len)
 {
 	int rc = 0, cnt = 0;
@@ -2941,6 +2967,7 @@ static struct attribute *bl_device_attrs[] = {
 	&dev_attr_dimming_on.attr,
 	&dev_attr_local_hbm_mode.attr,
 	&dev_attr_local_hbm_max_timeout.attr,
+	&dev_attr_dim_brightness.attr,
 	&dev_attr_state.attr,
 	&dev_attr_lp_state.attr,
 	&dev_attr_te2_state.attr,
@@ -3183,6 +3210,14 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		/* For the case of OFF->AOD, TE2 will be updated in backlight_update_status */
 		if (ctx->panel_state == PANEL_STATE_NORMAL)
 			exynos_panel_update_te2(ctx);
+
+		if (bridge->encoder) {
+			struct dsim_device *dsim = encoder_to_dsim(bridge->encoder);
+
+			/* Enable error flag detection for the primary dsi */
+			if (dsim->irq_err_fg >= 0)
+				enable_irq(dsim->irq_err_fg);
+		}
 	}
 	mutex_unlock(&ctx->mode_lock);
 
@@ -3260,6 +3295,13 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
+		if (bridge->encoder) {
+			struct dsim_device *dsim = encoder_to_dsim(bridge->encoder);
+
+			if (dsim->irq_err_fg >= 0)
+				disable_irq_nosync(dsim->irq_err_fg);
+		}
+
 		if (exynos_conn_state->blanked_mode) {
 			/* blanked mode takes precedence over normal modeset */
 			ctx->panel_state = PANEL_STATE_BLANK;

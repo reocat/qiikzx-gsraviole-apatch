@@ -51,12 +51,13 @@
 #define PANEL_REV_PROTO1_2	BIT(2)
 #define PANEL_REV_PROTO2	BIT(3)
 #define PANEL_REV_EVT1		BIT(4)
-#define PANEL_REV_EVT1_1	BIT(5)
-#define PANEL_REV_EVT1_2	BIT(6)
-#define PANEL_REV_EVT2		BIT(7)
-#define PANEL_REV_DVT1		BIT(8)
-#define PANEL_REV_DVT1_1	BIT(9)
-#define PANEL_REV_PVT		BIT(10)
+#define PANEL_REV_EVT1_0_2	BIT(5)
+#define PANEL_REV_EVT1_1	BIT(6)
+#define PANEL_REV_EVT1_2	BIT(7)
+#define PANEL_REV_EVT2		BIT(8)
+#define PANEL_REV_DVT1		BIT(9)
+#define PANEL_REV_DVT1_1	BIT(10)
+#define PANEL_REV_PVT		BIT(11)
 #define PANEL_REV_LATEST	BIT(31)
 #define PANEL_REV_ALL		(~0)
 #define PANEL_REV_GE(rev)	(~((rev) - 1))
@@ -231,10 +232,11 @@ struct exynos_panel_funcs {
 	 * @set_cabc_mode:
 	 *
 	 * This callback is used to implement panel specific logic for cabc mode
-	 * enablement. If this is not defined, it means that panel does not
-	 * support cabc.
+	 * enablement. If this is not defined, it means that panel does not support
+	 * cabc.
 	 */
-	void (*set_cabc_mode)(struct exynos_panel *exynos_panel, enum exynos_cabc_mode mode);
+	void (*set_cabc_mode)(struct exynos_panel *exynos_panel,
+				 enum exynos_cabc_mode mode);
 
 	/**
 	 * @set_local_hbm_mode:
@@ -474,6 +476,7 @@ struct exynos_panel_desc {
 	u32 min_luminance;
 	u32 max_brightness;
 	u32 min_brightness;
+	u32 lower_min_brightness; /* extreme low brightness */
 	u32 dft_brightness; /* default brightness */
 	u32 vrr_switch_duration;
 	/* extra frame is needed to apply brightness change if it's not at next VSYNC */
@@ -606,6 +609,9 @@ struct exynos_panel {
 	ktime_t last_self_refresh_active_ts;
 	ktime_t last_panel_idle_set_ts;
 	struct delayed_work idle_work;
+
+	/* Record the current CABC mode if force_off enabled */
+	enum exynos_cabc_mode current_cabc_mode;
 
 	/**
 	 * Record the last refresh rate switch. Note the mode switch doesn't
