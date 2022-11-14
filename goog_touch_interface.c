@@ -2809,23 +2809,23 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		enum gti_fw_status status, struct gti_fw_status_data* data)
 {
 	switch (status) {
-	case GTI_FW_STATUE_RESET:
+	case GTI_FW_STATUS_RESET:
 		GOOG_INFO("Firmware has been reset\n");
 		goog_update_fw_settings(gti);
 		break;
-	case GTI_FW_STATUE_PALM_ENTER:
+	case GTI_FW_STATUS_PALM_ENTER:
 		GOOG_INFO("Enter palm mode\n");
 		break;
-	case GTI_FW_STATUE_PALM_EXIT:
+	case GTI_FW_STATUS_PALM_EXIT:
 		GOOG_INFO("Exit palm mode\n");
 		break;
-	case GTI_FW_STATUE_GRIP_ENTER:
+	case GTI_FW_STATUS_GRIP_ENTER:
 		GOOG_INFO("Enter grip mode\n");
 		break;
-	case GTI_FW_STATUE_GRIP_EXIT:
+	case GTI_FW_STATUS_GRIP_EXIT:
 		GOOG_INFO("Exit grip mode\n");
 		break;
-	case GTI_FW_STATUE_NOISE_MODE:
+	case GTI_FW_STATUS_NOISE_MODE:
 		if (data == NULL) {
 			GOOG_INFO("Noise level is changed, level: unknown\n");
 		} else {
