@@ -29,12 +29,16 @@ static ssize_t force_active_show(
 	struct device *dev, struct device_attribute *attr, char *buf);
 static ssize_t force_active_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fw_grip_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t fw_grip_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fw_palm_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t fw_palm_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fw_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
-static ssize_t grip_enabled_show(struct device *dev,
-		struct device_attribute *attr, char *buf);
-static ssize_t grip_enabled_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t irq_enabled_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t irq_enabled_store(struct device *dev,
@@ -53,10 +57,6 @@ static ssize_t offload_enabled_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t offload_enabled_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t palm_enabled_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size);
-static ssize_t palm_enabled_show(struct device *dev,
-		struct device_attribute *attr, char *buf);
 static ssize_t ping_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t reset_show(struct device *dev,
@@ -89,15 +89,15 @@ static ssize_t v4l2_enabled_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 
 static DEVICE_ATTR_RW(force_active);
+static DEVICE_ATTR_RW(fw_grip);
+static DEVICE_ATTR_RW(fw_palm);
 static DEVICE_ATTR_RO(fw_ver);
-static DEVICE_ATTR_RW(grip_enabled);
 static DEVICE_ATTR_RW(irq_enabled);
 static DEVICE_ATTR_RW(mf_mode);
 static DEVICE_ATTR_RO(ms_base);
 static DEVICE_ATTR_RO(ms_diff);
 static DEVICE_ATTR_RO(ms_raw);
 static DEVICE_ATTR_RW(offload_enabled);
-static DEVICE_ATTR_RW(palm_enabled);
 static DEVICE_ATTR_RO(ping);
 static DEVICE_ATTR_RW(reset);
 static DEVICE_ATTR_RW(scan_mode);
@@ -111,15 +111,15 @@ static DEVICE_ATTR_RW(v4l2_enabled);
 
 static struct attribute *goog_attributes[] = {
 	&dev_attr_force_active.attr,
+	&dev_attr_fw_grip.attr,
+	&dev_attr_fw_palm.attr,
 	&dev_attr_fw_ver.attr,
-	&dev_attr_grip_enabled.attr,
 	&dev_attr_irq_enabled.attr,
 	&dev_attr_mf_mode.attr,
 	&dev_attr_ms_base.attr,
 	&dev_attr_ms_diff.attr,
 	&dev_attr_ms_raw.attr,
 	&dev_attr_offload_enabled.attr,
-	&dev_attr_palm_enabled.attr,
 	&dev_attr_ping.attr,
 	&dev_attr_reset.attr,
 	&dev_attr_scan_mode.attr,
@@ -198,6 +198,110 @@ static ssize_t force_active_store(struct device *dev,
 	return size;
 }
 
+static ssize_t fw_grip_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	ssize_t buf_idx = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_grip_cmd *cmd = &gti->cmd.grip_cmd;
+
+	cmd->setting = GTI_GRIP_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_GRIP_MODE);
+	if (ret == -EOPNOTSUPP) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			"error: not supported!\n");
+	} else if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			"error: %d!\n", ret);
+	} else {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			"result: %u\n", cmd->setting | (gti->ignore_grip_update << 1));
+	}
+	GOOG_INFO("%s", buf);
+
+	return buf_idx;
+}
+
+static ssize_t fw_grip_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	int fw_grip_mode = 0;
+	bool enabled = false;
+
+	if (kstrtou32(buf, 10, &fw_grip_mode)) {
+		GOOG_INFO("error: invalid input!\n");
+		return size;
+	}
+
+	enabled = fw_grip_mode & 0x01;
+	gti->ignore_grip_update = (fw_grip_mode >> 1) & 0x01;
+	gti->cmd.grip_cmd.setting = enabled ? GTI_GRIP_ENABLE : GTI_GRIP_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
+	if (ret == -EOPNOTSUPP)
+		GOOG_INFO("error: not supported!\n");
+	else if (ret)
+		GOOG_INFO("error: %d!\n", ret);
+	else
+		GOOG_INFO("fw_grip_mode: %u\n", fw_grip_mode);
+
+	return size;
+}
+
+static ssize_t fw_palm_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	ssize_t buf_idx = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_palm_cmd *cmd = &gti->cmd.palm_cmd;
+
+	cmd->setting = GTI_PALM_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_PALM_MODE);
+	if (ret == -EOPNOTSUPP) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			"error: not supported!\n");
+	} else if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			"error: %d!\n", ret);
+	} else {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			"result: %u\n", cmd->setting | (gti->ignore_palm_update << 1));
+	}
+	GOOG_INFO("%s", buf);
+
+	return buf_idx;
+}
+
+static ssize_t fw_palm_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	int fw_palm_mode;
+	bool enabled;
+
+	if (kstrtou32(buf, 10, &fw_palm_mode)) {
+		GOOG_INFO("error: invalid input!\n");
+		return -EINVAL;
+	}
+
+	enabled = fw_palm_mode & 0x01;
+	gti->ignore_palm_update = (fw_palm_mode >> 1) & 0x01;
+	gti->cmd.palm_cmd.setting = enabled ? GTI_PALM_ENABLE : GTI_PALM_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
+	if (ret == -EOPNOTSUPP)
+		GOOG_INFO("error: not supported!\n");
+	else if (ret)
+		GOOG_INFO("error: %d!\n", ret);
+	else
+		GOOG_INFO("fw_palm_mode= %u\n", fw_palm_mode);
+
+	return size;
+}
+
 static ssize_t fw_ver_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -220,56 +324,6 @@ static ssize_t fw_ver_show(struct device *dev,
 	GOOG_INFO("%s", buf);
 
 	return buf_idx;
-}
-
-static ssize_t grip_enabled_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int ret = 0;
-	ssize_t buf_idx = 0;
-	struct goog_touch_interface *gti = dev_get_drvdata(dev);
-	struct gti_grip_cmd *cmd = &gti->cmd.grip_cmd;
-
-	cmd->setting = GTI_GRIP_DISABLE;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_GRIP_MODE);
-	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-			"error: not supported!\n");
-	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-			"error: %d!\n", ret);
-	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-			"result: %u\n", cmd->setting);
-	}
-	GOOG_INFO("%s", buf);
-
-	return buf_idx;
-}
-
-static ssize_t grip_enabled_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	int ret = 0;
-	struct goog_touch_interface *gti = dev_get_drvdata(dev);
-	struct gti_grip_cmd *cmd = &gti->cmd.grip_cmd;
-	bool enabled = false;
-
-	if (kstrtobool(buf, &enabled)) {
-		GOOG_INFO("error: invalid input!\n");
-		return size;
-	}
-
-	cmd->setting = enabled ? GTI_GRIP_ENABLE : GTI_GRIP_DISABLE;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
-	if (ret == -EOPNOTSUPP)
-		GOOG_INFO("error: not supported!\n");
-	else if (ret)
-		GOOG_INFO("error: %d!\n", ret);
-	else
-		GOOG_INFO("grip_enabled= %u\n", cmd->setting);
-
-	return size;
 }
 
 static ssize_t irq_enabled_show(struct device *dev,
@@ -531,56 +585,6 @@ static ssize_t offload_enabled_store(struct device *dev,
 		if (!gti->offload_enabled)
 			goog_offload_set_running(gti, false);
 	}
-
-	return size;
-}
-
-static ssize_t palm_enabled_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	int ret = 0;
-	ssize_t buf_idx = 0;
-	struct goog_touch_interface *gti = dev_get_drvdata(dev);
-	struct gti_palm_cmd *cmd = &gti->cmd.palm_cmd;
-
-	cmd->setting = GTI_PALM_DISABLE;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_PALM_MODE);
-	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-			"error: not supported!\n");
-	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-			"error: %d!\n", ret);
-	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
-			"result: %u\n", cmd->setting);
-	}
-	GOOG_INFO("%s", buf);
-
-	return buf_idx;
-}
-
-static ssize_t palm_enabled_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	int ret = 0;
-	struct goog_touch_interface *gti = dev_get_drvdata(dev);
-	struct gti_palm_cmd *cmd = &gti->cmd.palm_cmd;
-	bool enabled = false;
-
-	if (kstrtobool(buf, &enabled)) {
-		GOOG_INFO("error: invalid input!\n");
-		return -EINVAL;
-	}
-
-	cmd->setting = enabled ? GTI_PALM_ENABLE : GTI_PALM_DISABLE;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
-	if (ret == -EOPNOTSUPP)
-		GOOG_INFO("error: not supported!\n");
-	else if (ret)
-		GOOG_INFO("error: %d!\n", ret);
-	else
-		GOOG_INFO("palm_enabled= %u\n", cmd->setting);
 
 	return size;
 }
@@ -1824,21 +1828,25 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 void goog_update_fw_settings(struct goog_touch_interface *gti)
 {
 	int ret = 0;
-	if (gti->offload.offload_running && gti->offload.config.filter_grip)
-		gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
-	else
-		gti->cmd.grip_cmd.setting = gti->default_grip_enabled;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
-	if (ret)
-		GOOG_WARN("unexpected return(%d)!", ret);
+	if(!gti->ignore_grip_update) {
+		if (gti->offload.offload_running && gti->offload.config.filter_grip)
+			gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
+		else
+			gti->cmd.grip_cmd.setting = gti->default_grip_enabled;
+		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
+		if (ret)
+			GOOG_WARN("unexpected return(%d)!", ret);
+	}
 
-	if (gti->offload.offload_running && gti->offload.config.filter_palm)
-		gti->cmd.palm_cmd.setting = GTI_PALM_DISABLE;
-	else
-		gti->cmd.palm_cmd.setting = gti->default_palm_enabled;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
-	if (ret)
-		GOOG_WARN("unexpected return(%d)!", ret);
+	if(!gti->ignore_palm_update) {
+		if (gti->offload.offload_running && gti->offload.config.filter_palm)
+			gti->cmd.palm_cmd.setting = GTI_PALM_DISABLE;
+		else
+			gti->cmd.palm_cmd.setting = gti->default_palm_enabled;
+		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
+		if (ret)
+			GOOG_WARN("unexpected return(%d)!", ret);
+	}
 
 	gti->cmd.screen_protector_mode_cmd.setting = gti->screen_protector_mode_setting;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SCREEN_PROTECTOR_MODE);
@@ -1856,6 +1864,7 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
 {
 	if (gti->offload.offload_running != running) {
+		GOOG_LOG("Offload state Changed: %d", running);
 		gti->offload.offload_running = running;
 		goog_update_fw_settings(gti);
 	}
