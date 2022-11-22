@@ -67,6 +67,7 @@ enum gti_cmd_type : u32 {
 	GTI_CMD_SET_HEATMAP_ENABLED,
 	GTI_CMD_SET_IRQ_MODE,
 	GTI_CMD_SET_PALM_MODE,
+	GTI_CMD_SET_REPORT_RATE,
 	GTI_CMD_SET_SCAN_MODE,
 	GTI_CMD_SET_SCREEN_PROTECTOR_MODE,
 	GTI_CMD_SET_SENSING_MODE,
@@ -296,6 +297,10 @@ struct gti_ping_cmd {
 	enum gti_ping_mode setting;
 };
 
+struct gti_report_rate_cmd {
+	u32 setting;
+};
+
 struct gti_reset_cmd {
 	enum gti_reset_mode setting;
 };
@@ -334,6 +339,7 @@ struct gti_sensor_data_cmd {
  * @irq_cmd: command to set/get irq mode.
  * @palm_cmd: command to set/get palm mode.
  * @ping_cmd: command to ping T-IC.
+ * @report_rate_cmd: command to change touch report rate.
  * @reset_cmd: command to reset T-IC.
  * @scan_cmd: command to set/get scan mode.
  * @screen_protector_mode_cmd: command to set/get screen protector mode.
@@ -351,6 +357,7 @@ struct gti_union_cmd_data {
 	struct gti_irq_cmd irq_cmd;
 	struct gti_palm_cmd palm_cmd;
 	struct gti_ping_cmd ping_cmd;
+	struct gti_report_rate_cmd report_rate_cmd;
 	struct gti_reset_cmd reset_cmd;
 	struct gti_scan_cmd scan_cmd;
 	struct gti_screen_protector_mode_cmd screen_protector_mode_cmd;
@@ -388,6 +395,7 @@ struct gti_fw_status_data {
  * @set_heatmap_enabled: vendor driver operation to apply the heatmap setting.
  * @set_irq_mode: vendor driver operation to apply the irq setting.
  * @set_palm_mode: vendor driver operation to apply the palm setting.
+ * @set_report_rate: driver operation to set touch report rate.
  * @set_scan_mode: vendor driver operation to set scan mode.
  * @set_screen_protector_mode: vendor driver operation to set screen protector mode.
  * @set_sensing_mode: vendor driver operation to set sensing mode.
@@ -399,7 +407,8 @@ struct gti_optional_configuration {
 	int (*get_mutual_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
 	int (*get_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
 	int (*get_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
-	int (*get_screen_protector_mode)(void *private_data, struct gti_screen_protector_mode_cmd *cmd);
+	int (*get_screen_protector_mode)(void *private_data,
+			struct gti_screen_protector_mode_cmd *cmd);
 	int (*get_self_sensor_data)(void *private_data, struct gti_sensor_data_cmd *cmd);
 	int (*get_sensing_mode)(void *private_data, struct gti_sensing_cmd *cmd);
 	int (*notify_display_state)(void *private_data, struct gti_display_state_cmd *cmd);
@@ -412,8 +421,10 @@ struct gti_optional_configuration {
 	int (*set_heatmap_enabled)(void *private_data, struct gti_heatmap_cmd *cmd);
 	int (*set_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
 	int (*set_palm_mode)(void *private_data, struct gti_palm_cmd *cmd);
+	int (*set_report_rate)(void *private_data, struct gti_report_rate_cmd *cmd);
 	int (*set_scan_mode)(void *private_data, struct gti_scan_cmd *cmd);
-	int (*set_screen_protector_mode)(void *private_data, struct gti_screen_protector_mode_cmd *cmd);
+	int (*set_screen_protector_mode)(void *private_data,
+			struct gti_screen_protector_mode_cmd *cmd);
 	int (*set_sensing_mode)(void *private_data, struct gti_sensing_cmd *cmd);
 };
 
@@ -463,6 +474,15 @@ struct gti_pm {
  * @display_vrefresh: display vrefresh in Hz.
  * @mf_mode: current motion filter mode.
  * @mf_state: current motion filter state.
+ * @vrr_enabled: variable touch report rate is enabled or not.
+ * @report_rate_table_size: report rate table size from device tree.
+ * @touch_report_rate_table: touch report rate table parsed from device tree.
+ * @display_refresh_rate_table: display refresh rate table parsed from device tree.
+ * @report_rate_setting: current touch report rate.
+ * @report_rate_setting_next: next touch report rate going be set.
+ * @set_report_rate_work: delayed work for setting report rate.
+ * @increase_report_rate_delay: delayed work will be start after a delay in seconds.
+ * @decrease_report_rate_delay: delayed work will be start after a delay in seconds.
  * @screen_protector_mode_setting: the setting of screen protector mode.
  * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
  * @pm: struct that used by gti pm.
@@ -473,7 +493,9 @@ struct gti_pm {
  * @v4l2_enable: v4l2 is enabled or not.
  * @tbn_enable: tbn is enabled or not.
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
+ * @ignore_grip_update: Ignore fw_grip status updates made on offload state change.
  * @default_grip_enabled: the grip default setting.
+ * @ignore_palm_update: Ignore fw_palm status updates made on offload state change.
  * @default_palm_enabled: the palm default setting.
  * @wakeup_before_force_active_enabled: waking up the screen to force active.
  * @wakeup_before_force_active_delay: the ms delay after waking up screen to force active.
@@ -514,6 +536,16 @@ struct goog_touch_interface {
 	ktime_t input_timestamp;
 	ktime_t mf_downtime;
 
+	bool vrr_enabled;
+	int report_rate_table_size;
+	u32 *display_refresh_rate_table;
+	u32 *touch_report_rate_table;
+	u32 report_rate_setting;
+	u32 report_rate_setting_next;
+	struct delayed_work set_report_rate_work;
+	u32 increase_report_rate_delay;
+	u32 decrease_report_rate_delay;
+
 	int display_vrefresh;
 	enum gti_mf_mode mf_mode;
 	enum gti_mf_state mf_state;
@@ -521,14 +553,15 @@ struct goog_touch_interface {
 	u32 tbn_register_mask;
 	struct gti_pm pm;
 	struct pm_qos_request pm_qos_req;
-
 	bool panel_is_lp_mode;
 	bool force_legacy_report;
 	bool offload_enabled;
 	bool v4l2_enabled;
 	bool tbn_enabled;
 	bool input_timestamp_changed;
+	bool ignore_grip_update;
 	bool default_grip_enabled;
+	bool ignore_palm_update;
 	bool default_palm_enabled;
 	bool wakeup_before_force_active_enabled;
 	unsigned int wakeup_before_force_active_delay;
