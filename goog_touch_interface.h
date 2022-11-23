@@ -30,7 +30,6 @@
 					__func__, ##args)
 #define MAX_SLOTS 10
 
-#define KTIME_RELEASE_ALL (ktime_set(0, 0))
 #define GTI_DEBUG_KFIFO_LEN 4 /* must be power of 2. */
 
 #define GTI_SENSOR_2D_OUT_FORMAT_WIDTH(size) ((size > (PAGE_SIZE * sizeof(s16) / 6)) ? 1 : 5)
@@ -503,6 +502,7 @@ struct gti_pm {
  * @options: optional configuration that could apply by vendor driver.
  * @input_lock: protect the input report between non-offload and offload.
  * @manual_sensing_lock: protect the input manual_sensor_data_cmd.
+ * @input_process_lock: protect heatmap reading and frame reserving.
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
  * @v4l2: struct that used by v4l2.
@@ -519,7 +519,6 @@ struct gti_pm {
  * @pm: struct that used by gti pm.
  * @pm_qos_req: struct that used by pm qos.
  * @panel_is_lp_mode: display is in low power mode.
- * @force_legacy_report: force to directly report input by kernel input API.
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
  * @tbn_enable: tbn is enabled or not.
@@ -559,6 +558,7 @@ struct goog_touch_interface {
 	struct gti_optional_configuration options;
 	struct mutex input_lock;
 	struct mutex manual_sensing_lock;
+	struct mutex input_process_lock;
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
 	struct v4l2_heatmap v4l2;
@@ -577,7 +577,6 @@ struct goog_touch_interface {
 	struct pm_qos_request pm_qos_req;
 
 	bool panel_is_lp_mode;
-	bool force_legacy_report;
 	bool offload_enabled;
 	bool v4l2_enabled;
 	bool tbn_enabled;
@@ -650,7 +649,7 @@ inline int goog_request_threaded_irq(struct goog_touch_interface *gti,
 		unsigned long irqflags, const char *devname, void *dev_id);
 
 int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type);
-int goog_input_process(struct goog_touch_interface *gti);
+int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq);
 struct goog_touch_interface *goog_touch_interface_probe(
 		void *private_data,
 		struct device *dev,
