@@ -1237,7 +1237,7 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
 	}
 	/* Extra check for unexpected case. */
 	for_each_set_bit(slot, &gti->slot_bit_active, MAX_SLOTS) {
-		GOOG_INFO("slot #%d is not released after suspend!\n", slot);
+		GOOG_INFO("slot #%d is active!\n", slot);
 	}
 }
 #endif /* GTI_DEBUG_KFIFO_LEN */
@@ -1739,7 +1739,7 @@ static void goog_offload_populate_stylus_status_channel(
 }
 
 void goog_offload_populate_frame(struct goog_touch_interface *gti,
-		struct touch_offload_frame *frame)
+		struct touch_offload_frame *frame, bool report_from_irq)
 {
 	static u64 index;
 	char trace_tag[128];
@@ -1792,7 +1792,14 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		} else if (channel_type & TOUCH_SCAN_TYPE_MUTUAL) {
 			ATRACE_BEGIN("populate mutual data");
 			cmd->type = GTI_SENSOR_DATA_TYPE_MS;
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
+			if (!report_from_irq) {
+				cmd->size = TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx);
+				memset(gti->heatmap_buf, 0, cmd->size);
+				cmd->buffer = gti->heatmap_buf;
+				ret = 0;
+			} else {
+				ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
+			}
 			if (ret == 0 && cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 				goog_offload_populate_mutual_channel(gti, frame, i,
@@ -1805,7 +1812,14 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		} else if (channel_type & TOUCH_SCAN_TYPE_SELF) {
 			ATRACE_BEGIN("populate self data");
 			cmd->type = GTI_SENSOR_DATA_TYPE_SS;
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
+			if (!report_from_irq) {
+				cmd->size = TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx);
+				memset(gti->heatmap_buf, 0, cmd->size);
+				cmd->buffer = gti->heatmap_buf;
+				ret = 0;
+			} else {
+				ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
+			}
 			if (ret == 0 && cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
 				goog_offload_populate_self_channel(gti, frame, i,
@@ -2089,13 +2103,13 @@ void goog_offload_remove(struct goog_touch_interface *gti)
 
 bool goog_input_legacy_report(struct goog_touch_interface *gti)
 {
-	if (!gti->offload.offload_running || gti->force_legacy_report)
+	if (!gti->offload.offload_running)
 		return true;
 
 	return false;
 }
 
-int goog_input_process(struct goog_touch_interface *gti)
+int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq)
 {
 	int ret = 0;
 	struct touch_offload_frame **frame = &gti->offload_frame;
@@ -2129,7 +2143,7 @@ int goog_input_process(struct goog_touch_interface *gti)
 			ret = -EBUSY;
 		} else {
 			goog_offload_set_running(gti, true);
-			goog_offload_populate_frame(gti, *frame);
+			goog_offload_populate_frame(gti, *frame, report_from_irq);
 			ret = touch_offload_queue_frame(&gti->offload, *frame);
 			if (ret)
 				GOOG_ERR("failed to queue reserved frame(ret %d)!\n", ret);
@@ -2182,18 +2196,6 @@ void goog_input_set_timestamp(
 		struct goog_touch_interface *gti,
 		struct input_dev *dev, ktime_t timestamp)
 {
-	/* Specific case to handle all fingers release. */
-	if (!ktime_compare(timestamp, KTIME_RELEASE_ALL)) {
-		GOOG_DBG("Enable force_legacy_report for all fingers release.\n");
-		timestamp = ktime_get();
-		gti->force_legacy_report = true;
-	} else {
-		if (gti->force_legacy_report) {
-			GOOG_DBG("Disable force_legacy_report as usual state.\n");
-			gti->force_legacy_report = false;
-		}
-	}
-
 	if (goog_input_legacy_report(gti))
 		input_set_timestamp(dev, timestamp);
 
@@ -2297,6 +2299,28 @@ void goog_input_sync(struct goog_touch_interface *gti, struct input_dev *dev)
 		input_sync(dev);
 }
 EXPORT_SYMBOL(goog_input_sync);
+
+void goog_input_release_all_fingers(struct goog_touch_interface *gti)
+{
+	int i;
+
+	goog_input_lock(gti);
+
+	goog_input_set_timestamp(gti, gti->vendor_input_dev, ktime_get());
+	for (i = 0; i < MAX_SLOTS; i++) {
+		goog_input_mt_slot(gti, gti->vendor_input_dev, i);
+		goog_input_mt_report_slot_state(
+			gti, gti->vendor_input_dev, MT_TOOL_FINGER, false);
+	}
+	goog_input_report_key(gti, gti->vendor_input_dev, BTN_TOUCH, 0);
+	goog_input_sync(gti, gti->vendor_input_dev);
+
+	goog_input_unlock(gti);
+
+	mutex_lock(&gti->input_process_lock);
+	goog_input_process(gti, false);
+	mutex_unlock(&gti->input_process_lock);
+}
 
 void goog_register_tbn(struct goog_touch_interface *gti)
 {
@@ -2760,6 +2784,9 @@ static void goog_pm_suspend_work(struct work_struct *work)
 	gti_debug_hc_dump(gti);
 	gti_debug_input_dump(gti);
 
+	if (gti->slot_bit_active)
+		goog_input_release_all_fingers(gti);
+
 	pm_relax(gti->dev);
 }
 
@@ -2820,6 +2847,7 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 	switch (status) {
 	case GTI_FW_STATUS_RESET:
 		GOOG_INFO("Firmware has been reset\n");
+		goog_input_release_all_fingers(gti);
 		goog_update_fw_settings(gti);
 		break;
 	case GTI_FW_STATUS_PALM_ENTER:
@@ -2921,7 +2949,11 @@ static irqreturn_t gti_irq_thread_fn(int irq, void *data)
 		ret = gti->vendor_irq_thread_fn(irq, gti->vendor_irq_cookie);
 	else
 		ret = IRQ_HANDLED;
-	goog_input_process(gti);
+
+	mutex_lock(&gti->input_process_lock);
+	goog_input_process(gti, true);
+	mutex_unlock(&gti->input_process_lock);
+
 	gti_debug_hc_update(gti, false);
 	cpu_latency_qos_update_request(&gti->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	ATRACE_END();
@@ -3004,6 +3036,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
 		mutex_init(&gti->input_lock);
 		mutex_init(&gti->manual_sensing_lock);
+		mutex_init(&gti->input_process_lock);
 		goog_init_options(gti, options);
 		goog_offload_probe(gti);
 		goog_init_input(gti);
