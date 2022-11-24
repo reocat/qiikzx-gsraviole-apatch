@@ -569,6 +569,7 @@ struct goog_touch_interface {
 	ktime_t mf_downtime;
 
 	int display_vrefresh;
+	enum gti_display_state_setting display_state;
 	enum gti_mf_mode mf_mode;
 	enum gti_mf_state mf_state;
 	enum gti_screen_protector_mode screen_protector_mode_setting;
@@ -588,8 +589,8 @@ struct goog_touch_interface {
 	bool wakeup_before_force_active_enabled;
 	unsigned int wakeup_before_force_active_delay;
 	union {
-	u8 offload_id_byte[4];
-	u32 offload_id;
+		u8 offload_id_byte[4];
+		u32 offload_id;
 	};
 	u8 *heatmap_buf;
 	u32 heatmap_buf_size;
