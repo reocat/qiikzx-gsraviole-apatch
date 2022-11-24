@@ -21,6 +21,8 @@ static u8 gti_dev_num;
  * GTI/common: forward declarations, structures and functions.
  */
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running);
+static void goog_set_display_state(struct goog_touch_interface *gti,
+	enum gti_display_state_setting display_state);
 
 /*-----------------------------------------------------------------------------
  * GTI/sysfs: forward declarations, structures and functions.
@@ -1250,7 +1252,6 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
  */
 static void panel_bridge_enable(struct drm_bridge *bridge)
 {
-	int ret = 0;
 	struct goog_touch_interface *gti =
 		container_of(bridge, struct goog_touch_interface, panel_bridge);
 
@@ -1259,19 +1260,11 @@ static void panel_bridge_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	GOOG_INFO("screen-on.\n");
-
-	goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
-
-	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-	if (ret && ret != -EOPNOTSUPP)
-		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
+	goog_set_display_state(gti, GTI_DISPLAY_STATE_ON);
 }
 
 static void panel_bridge_disable(struct drm_bridge *bridge)
 {
-	int ret = 0;
 	struct goog_touch_interface *gti =
 		container_of(bridge, struct goog_touch_interface, panel_bridge);
 
@@ -1282,14 +1275,7 @@ static void panel_bridge_disable(struct drm_bridge *bridge)
 			return;
 	}
 
-	GOOG_INFO("screen-off.\n");
-
-	goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
-
-	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-	if (ret && ret != -EOPNOTSUPP)
-		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
+	goog_set_display_state(gti, GTI_DISPLAY_STATE_OFF);
 }
 
 struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
@@ -1334,16 +1320,10 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 
 		GOOG_INFO("panel_is_lp_mode changed from %d to %d.\n",
 			gti->panel_is_lp_mode, panel_is_lp_mode);
-		if (panel_is_lp_mode) {
-			goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
-			gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
-		} else {
-			goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
-			gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
-		}
-		ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-		if (ret && ret != -EOPNOTSUPP)
-			GOOG_WARN("unexpected return(%d)!", ret);
+		if (panel_is_lp_mode)
+			goog_set_display_state(gti, GTI_DISPLAY_STATE_OFF);
+		else
+			goog_set_display_state(gti, GTI_DISPLAY_STATE_ON);
 	}
 	gti->panel_is_lp_mode = panel_is_lp_mode;
 
@@ -1406,6 +1386,37 @@ static void unregister_panel_bridge(struct drm_bridge *bridge)
 /*-----------------------------------------------------------------------------
  * GTI: functions.
  */
+static void goog_set_display_state(struct goog_touch_interface *gti,
+	enum gti_display_state_setting display_state)
+{
+	int ret = 0;
+
+	if (gti->display_state == display_state)
+		return;
+
+	switch (display_state) {
+	case GTI_DISPLAY_STATE_OFF:
+		GOOG_INFO("screen-off.\n");
+		goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
+
+		break;
+	case GTI_DISPLAY_STATE_ON:
+		GOOG_INFO("screen-on.\n");
+		goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
+
+		break;
+	default:
+		GOOG_ERR("Unexpected value(0x%X) of display state parameter.\n",
+			display_state);
+		return;
+	}
+	gti->display_state = display_state;
+	gti->cmd.display_state_cmd.setting = display_state;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
+	if (ret && ret != -EOPNOTSUPP)
+		GOOG_WARN("Unexpected vendor_cmd return(%d)!\n", ret);
+}
+
 bool goog_check_spi_dma_enabled(struct spi_device *spi_dev)
 {
 	bool ret = false;
@@ -3037,6 +3048,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->vendor_default_handler = default_handler;
 		gti->mf_mode = GTI_MF_MODE_DEFAULT;
 		gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
+		gti->display_state = GTI_DISPLAY_STATE_ON;
 		mutex_init(&gti->input_lock);
 		mutex_init(&gti->manual_sensing_lock);
 		mutex_init(&gti->input_process_lock);
