@@ -54,6 +54,11 @@ int apply_overlay_files(const char *out_filename, const char *base_filename,
   new_blob = ufdt_apply_overlay(blob, blob_len, overlay_buf, overlay_len);
   clock_t end = clock();
 
+  if (!new_blob) {
+    fprintf(stderr, "ufdt_apply_overlay() returned null: bad input?\n");
+    goto end;
+  }
+
   if (write_fdt_to_file(out_filename, new_blob) != 0) {
     fprintf(stderr, "Write file error: %s\n", out_filename);
     goto end;
