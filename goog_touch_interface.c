@@ -428,7 +428,7 @@ static ssize_t ms_base_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
@@ -461,7 +461,7 @@ static ssize_t ms_base_show(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -476,7 +476,7 @@ static ssize_t ms_diff_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
@@ -509,7 +509,7 @@ static ssize_t ms_diff_show(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -524,7 +524,7 @@ static ssize_t ms_raw_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
@@ -557,7 +557,7 @@ static ssize_t ms_raw_show(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -823,7 +823,7 @@ static ssize_t ss_base_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
@@ -860,7 +860,7 @@ static ssize_t ss_base_show(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -875,7 +875,7 @@ static ssize_t ss_diff_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
@@ -912,7 +912,7 @@ static ssize_t ss_diff_show(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -927,7 +927,7 @@ static ssize_t ss_raw_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
@@ -964,7 +964,7 @@ static ssize_t ss_raw_show(struct device *dev,
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -3050,7 +3050,6 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
 		gti->display_state = GTI_DISPLAY_STATE_ON;
 		mutex_init(&gti->input_lock);
-		mutex_init(&gti->manual_sensing_lock);
 		mutex_init(&gti->input_process_lock);
 		goog_init_options(gti, options);
 		goog_offload_probe(gti);
