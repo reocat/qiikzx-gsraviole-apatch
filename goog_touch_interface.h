@@ -512,7 +512,6 @@ struct gti_pm {
  * @dev: pointer to struct device that used by google touch interface driver.
  * @options: optional configuration that could apply by vendor driver.
  * @input_lock: protect the input report between non-offload and offload.
- * @manual_sensing_lock: protect the input manual_sensor_data_cmd.
  * @input_process_lock: protect heatmap reading and frame reserving.
  * @offload: struct that used by touch offload.
  * @offload_frame: reserved frame that used by touch offload.
@@ -577,7 +576,6 @@ struct goog_touch_interface {
 	struct device *dev;
 	struct gti_optional_configuration options;
 	struct mutex input_lock;
-	struct mutex manual_sensing_lock;
 	struct mutex input_process_lock;
 	struct touch_offload_context offload;
 	struct touch_offload_frame *offload_frame;
