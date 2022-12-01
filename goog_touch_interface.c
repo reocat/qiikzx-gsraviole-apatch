@@ -1905,6 +1905,7 @@ void goog_offload_input_report(void *handle,
 	bool touch_down = 0;
 	unsigned int tool_type = MT_TOOL_FINGER;
 	int i;
+	int error;
 	unsigned long slot_bit_active = 0;
 
 	ATRACE_BEGIN(__func__);
@@ -1958,8 +1959,16 @@ void goog_offload_input_report(void *handle,
 	if (touch_down)
 		goog_v4l2_read(gti, report->timestamp);
 
+	error = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT, true);
+	if (error < 0) {
+		GOOG_WARN("Error while obtaining OFFLOAD_REPORT wakelock: %d!\n", error);
+		ATRACE_END();
+		return;
+	}
 	goog_update_motion_filter(gti, slot_bit_active);
-
+	error = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT);
+	if (error < 0)
+		GOOG_WARN("Error while releasing OFFLOAD_REPORT wakelock: %d!\n", error);
 	ATRACE_END();
 }
 

@@ -157,6 +157,7 @@ enum gti_pm_wakelock_type : u32 {
 	GTI_PM_WAKELOCK_TYPE_SYSFS = (1 << 3),
 	GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE = (1 << 4),
 	GTI_PM_WAKELOCK_TYPE_BUGREPORT = (1 << 5),
+	GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT = (1 << 6),
 };
 
 enum gti_reset_mode : u32 {
