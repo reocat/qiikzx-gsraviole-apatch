@@ -1397,12 +1397,14 @@ static void goog_set_display_state(struct goog_touch_interface *gti,
 	switch (display_state) {
 	case GTI_DISPLAY_STATE_OFF:
 		GOOG_INFO("screen-off.\n");
-		goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
+		ret = goog_pm_wake_unlock_nosync(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
+		if (ret < 0) GOOG_INFO("Error while obtaining screen_on wakelock: %d!\n", ret);
 
 		break;
 	case GTI_DISPLAY_STATE_ON:
 		GOOG_INFO("screen-on.\n");
-		goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
+		ret = goog_pm_wake_lock_nosync(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
+		if (ret < 0) GOOG_INFO("Error while obtaining screen_on wakelock: %d!\n", ret);
 
 		break;
 	default:
@@ -2659,12 +2661,10 @@ void goog_init_options(struct goog_touch_interface *gti,
 	}
 }
 
-int goog_pm_wake_lock(struct goog_touch_interface *gti,
+int goog_pm_wake_lock_nosync(struct goog_touch_interface *gti,
 		enum gti_pm_wakelock_type type, bool skip_pm_resume)
 {
 	struct gti_pm* pm = NULL;
-	int ret = 0;
-	bool wait_resume = false;
 
 	if ((gti == NULL) || !gti->pm.enabled)
 		return -ENODEV;
@@ -2693,37 +2693,35 @@ int goog_pm_wake_lock(struct goog_touch_interface *gti,
 
 	if (skip_pm_resume) {
 		mutex_unlock(&pm->lock_mutex);
-		return ret;
+		return 0;
 	}
 
-	/*
-	 * When triggering a wake, wait up to one second to resume.
-	 * SCREEN_ON does not need to wait.
-	 */
-	if (type != GTI_PM_WAKELOCK_TYPE_SCREEN_ON)
-		wait_resume = true;
-
+	pm->new_state = GTI_PM_RESUME;
+	pm->update_state = true;
+	queue_work(pm->event_wq, &pm->state_update_work);
 	mutex_unlock(&pm->lock_mutex);
+	return 0;
+}
+EXPORT_SYMBOL(goog_pm_wake_lock_nosync);
 
-	/* Complete or cancel any outstanding transitions */
-	cancel_work_sync(&pm->suspend_work);
-	cancel_work_sync(&pm->resume_work);
+int goog_pm_wake_lock(struct goog_touch_interface *gti,
+		enum gti_pm_wakelock_type type, bool skip_pm_resume)
+{
+	struct gti_pm* pm = NULL;
+	int ret = 0;
 
-	queue_work(pm->event_wq, &pm->resume_work);
+	if ((gti == NULL) || !gti->pm.enabled)
+		return -ENODEV;
+	pm = &gti->pm;
 
-	if (wait_resume) {
-		wait_for_completion_timeout(&pm->bus_resumed, msecs_to_jiffies(MSEC_PER_SEC));
-		if (pm->state != GTI_PM_RESUME) {
-			GOOG_ERR("Failed to wake the touch bus.\n");
-			ret = -ETIMEDOUT;
-		}
-	}
-
+	ret = goog_pm_wake_lock_nosync(gti, type, skip_pm_resume);
+	if (ret < 0) return ret;
+	flush_workqueue(pm->event_wq);
 	return ret;
 }
 EXPORT_SYMBOL(goog_pm_wake_lock);
 
-int goog_pm_wake_unlock(struct goog_touch_interface *gti,
+int goog_pm_wake_unlock_nosync(struct goog_touch_interface *gti,
 		enum gti_pm_wakelock_type type)
 {
 	struct gti_pm* pm = NULL;
@@ -2745,17 +2743,29 @@ int goog_pm_wake_unlock(struct goog_touch_interface *gti,
 	pm->locks &= ~type;
 
 	if (pm->locks == 0) {
-		mutex_unlock(&pm->lock_mutex);
-		/* Complete or cancel any outstanding transitions */
-		cancel_work_sync(&pm->suspend_work);
-		cancel_work_sync(&pm->resume_work);
-
-		mutex_lock(&pm->lock_mutex);
-		if (pm->locks == 0)
-			queue_work(pm->event_wq, &pm->suspend_work);
+		pm->new_state = GTI_PM_SUSPEND;
+		pm->update_state = true;
+		queue_work(pm->event_wq, &pm->state_update_work);
 	}
 	mutex_unlock(&pm->lock_mutex);
 
+	return ret;
+}
+EXPORT_SYMBOL(goog_pm_wake_unlock_nosync);
+
+int goog_pm_wake_unlock(struct goog_touch_interface *gti,
+		enum gti_pm_wakelock_type type)
+{
+	struct gti_pm* pm = NULL;
+	int ret = 0;
+
+	if ((gti == NULL) || !gti->pm.enabled)
+		return -ENODEV;
+	pm = &gti->pm;
+
+	ret = goog_pm_wake_unlock_nosync(gti, type);
+	if (ret < 0) return ret;
+	flush_workqueue(pm->event_wq);
 	return ret;
 }
 EXPORT_SYMBOL(goog_pm_wake_unlock);
@@ -2779,9 +2789,8 @@ u32 goog_pm_wake_get_locks(struct goog_touch_interface *gti)
 }
 EXPORT_SYMBOL(goog_pm_wake_get_locks);
 
-static void goog_pm_suspend_work(struct work_struct *work)
+static void goog_pm_suspend(struct gti_pm *pm)
 {
-	struct gti_pm *pm = container_of(work, struct gti_pm, suspend_work);
 	struct goog_touch_interface *gti = container_of(pm,
 			struct goog_touch_interface, pm);
 	int ret = 0;
@@ -2795,7 +2804,6 @@ static void goog_pm_suspend_work(struct work_struct *work)
 	GOOG_INFO("irq_index: %llu, input_index: %llu.\n", gti->irq_index, gti->input_index);
 	pm->state = GTI_PM_SUSPEND;
 
-	reinit_completion(&pm->bus_resumed);
 	if (pm->suspend)
 		pm->suspend(gti->vendor_dev);
 
@@ -2813,9 +2821,8 @@ static void goog_pm_suspend_work(struct work_struct *work)
 	pm_relax(gti->dev);
 }
 
-static void goog_pm_resume_work(struct work_struct *work)
+static void goog_pm_resume(struct gti_pm *pm)
 {
-	struct gti_pm *pm = container_of(work, struct gti_pm, resume_work);
 	struct goog_touch_interface *gti = container_of(pm,
 			struct goog_touch_interface, pm);
 	int ret = 0;
@@ -2837,8 +2844,26 @@ static void goog_pm_resume_work(struct work_struct *work)
 
 	if (pm->resume)
 		pm->resume(gti->vendor_dev);
+}
 
-	complete_all(&pm->bus_resumed);
+void goog_pm_state_update_work(struct work_struct *work) {
+	struct gti_pm *pm = container_of(work, struct gti_pm, state_update_work);
+	enum gti_pm_state new_state;
+
+	mutex_lock(&pm->lock_mutex);
+	while (pm->update_state) {
+		pm->update_state = false;
+		new_state = pm->new_state;
+		mutex_unlock(&pm->lock_mutex);
+		if (new_state != pm->state) {
+			if (new_state == GTI_PM_RESUME)
+				goog_pm_resume(pm);
+			else
+				goog_pm_suspend(pm);
+		}
+		mutex_lock(&pm->lock_mutex);
+	}
+	mutex_unlock(&pm->lock_mutex);
 }
 
 int goog_pm_register_notification(struct goog_touch_interface *gti,
@@ -2918,11 +2943,7 @@ static int goog_pm_probe(struct goog_touch_interface *gti)
 	}
 
 	mutex_init(&pm->lock_mutex);
-	INIT_WORK(&pm->suspend_work, goog_pm_suspend_work);
-	INIT_WORK(&pm->resume_work, goog_pm_resume_work);
-
-	init_completion(&pm->bus_resumed);
-	complete_all(&pm->bus_resumed);
+	INIT_WORK(&pm->state_update_work, goog_pm_state_update_work);
 
 	/* init pm_qos. */
 	cpu_latency_qos_add_request(&gti->pm_qos_req, PM_QOS_DEFAULT_VALUE);
