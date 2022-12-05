@@ -36,7 +36,7 @@ struct touch_offload_frame {
 /* Touch Offload Context
  *
  * dev - char device
- * major_num - device major number
+ * dev_num - device number
  * cls - pointer to class associated class
  * device - pointer to associated device
  * file - char device file for ioctl interface
@@ -61,7 +61,7 @@ struct touch_offload_frame {
 struct touch_offload_context {
 	/* ioctl interface */
 	struct cdev dev;
-	int major_num;
+	dev_t dev_num;
 	struct class *cls;
 	struct device *device;
 	struct file file;

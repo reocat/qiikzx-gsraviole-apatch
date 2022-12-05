@@ -21,6 +21,8 @@ static u8 gti_dev_num;
  * GTI/common: forward declarations, structures and functions.
  */
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running);
+static void goog_set_display_state(struct goog_touch_interface *gti,
+	enum gti_display_state_setting display_state);
 
 /*-----------------------------------------------------------------------------
  * GTI/sysfs: forward declarations, structures and functions.
@@ -141,15 +143,15 @@ static ssize_t force_active_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
-	int ret = 0;
+	ssize_t buf_idx = 0;
 	bool locked = false;
 
 	locked = goog_pm_wake_check_locked(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
-	ret = snprintf(buf, PAGE_SIZE, "result: %s\n",
+	buf_idx += scnprintf(buf, PAGE_SIZE - buf_idx, "result: %s\n",
 		locked ? "locked" : "unlocked");
 	GOOG_INFO("%s", buf);
 
-	return ret;
+	return buf_idx;
 }
 
 static ssize_t force_active_store(struct device *dev,
@@ -209,13 +211,13 @@ static ssize_t fw_grip_show(struct device *dev,
 	cmd->setting = GTI_GRIP_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_GRIP_MODE);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", cmd->setting | (gti->ignore_grip_update << 1));
 	}
 	GOOG_INFO("%s", buf);
@@ -261,13 +263,13 @@ static ssize_t fw_palm_show(struct device *dev,
 	cmd->setting = GTI_PALM_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_PALM_MODE);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", cmd->setting | (gti->ignore_palm_update << 1));
 	}
 	GOOG_INFO("%s", buf);
@@ -312,13 +314,13 @@ static ssize_t fw_ver_show(struct device *dev,
 	memset(gti->cmd.fw_version_cmd.buffer, 0, sizeof(gti->cmd.fw_version_cmd.buffer));
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_FW_VERSION);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %s\n", gti->cmd.fw_version_cmd.buffer);
 	}
 	GOOG_INFO("%s", buf);
@@ -336,13 +338,13 @@ static ssize_t irq_enabled_show(struct device *dev,
 	gti->cmd.irq_cmd.setting = GTI_IRQ_MODE_NA;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_IRQ_MODE);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", gti->cmd.irq_cmd.setting);
 	}
 	GOOG_INFO("%s", buf);
@@ -380,7 +382,7 @@ static ssize_t mf_mode_show(struct device *dev,
 	ssize_t buf_idx = 0;
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
-	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 		"result: %u\n", gti->mf_mode);
 	GOOG_INFO("%s", buf);
 
@@ -426,9 +428,9 @@ static ssize_t ms_base_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
 		return buf_idx;
 	}
@@ -438,28 +440,28 @@ static ssize_t ms_base_show(struct device *dev,
 	cmd->size = 0;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
 		u8 width = GTI_SENSOR_2D_OUT_FORMAT_WIDTH(cmd->size);
 
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "result:\n");
 		if (cmd->buffer && cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 			for (y = 0; y < rx; y++) {
 				for (x = 0; x < tx; x++) {
-					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%*d,", width, ((s16 *)cmd->buffer)[y * tx + x]);
 				}
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\n");
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			}
 			GOOG_INFO("%s", buf);
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -474,9 +476,9 @@ static ssize_t ms_diff_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
 		return buf_idx;
 	}
@@ -486,28 +488,28 @@ static ssize_t ms_diff_show(struct device *dev,
 	cmd->size = 0;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
 		u8 width = GTI_SENSOR_2D_OUT_FORMAT_WIDTH(cmd->size);
 
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "result:\n");
 		if (cmd->buffer && cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 			for (y = 0; y < rx; y++) {
 				for (x = 0; x < tx; x++) {
-					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%*d,", width, ((s16 *)cmd->buffer)[y * tx + x]);
 				}
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\n");
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			}
 			GOOG_INFO("%s", buf);
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -522,9 +524,9 @@ static ssize_t ms_raw_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
 		return buf_idx;
 	}
@@ -534,28 +536,28 @@ static ssize_t ms_raw_show(struct device *dev,
 	cmd->size = 0;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
 		u8 width = GTI_SENSOR_2D_OUT_FORMAT_WIDTH(cmd->size);
 
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "result:\n");
 		if (cmd->buffer && cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 			for (y = 0; y < rx; y++) {
 				for (x = 0; x < tx; x++) {
-					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+					buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%*d,", width, ((s16 *)cmd->buffer)[y * tx + x]);
 				}
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\n");
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			}
 			GOOG_INFO("%s", buf);
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -565,7 +567,7 @@ static ssize_t offload_enabled_show(struct device *dev,
 	ssize_t buf_idx = 0;
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
-	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 		"result: %d\n", gti->offload_enabled);
 	GOOG_INFO("%s", buf);
 
@@ -599,15 +601,15 @@ static ssize_t ping_show(struct device *dev,
 	gti->cmd.ping_cmd.setting = GTI_PING_ENABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_PING);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 		gti->cmd.ping_cmd.setting = GTI_PING_NA;
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 		gti->cmd.ping_cmd.setting = GTI_PING_NA;
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: success.\n");
 	}
 	GOOG_INFO("%s", buf);
@@ -623,10 +625,10 @@ static ssize_t reset_show(struct device *dev,
 
 	if (gti->cmd.reset_cmd.setting == GTI_RESET_MODE_NOP ||
 		gti->cmd.reset_cmd.setting == GTI_RESET_MODE_NA) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", gti->cmd.reset_cmd.setting);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: success.\n");
 	}
 	GOOG_INFO("%s", buf);
@@ -682,13 +684,13 @@ static ssize_t scan_mode_show(struct device *dev,
 	gti->cmd.scan_cmd.setting = GTI_SCAN_MODE_NA;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SCAN_MODE);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", gti->cmd.scan_cmd.setting);
 	}
 	GOOG_INFO("%s", buf);
@@ -761,20 +763,20 @@ static ssize_t screen_protector_mode_enabled_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	int ret = 0;
-	size_t size = 0;
+	ssize_t buf_idx = 0;
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 	struct gti_screen_protector_mode_cmd *cmd = &gti->cmd.screen_protector_mode_cmd;
 
 	cmd->setting = GTI_SCREEN_PROTECTOR_MODE_NA;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SCREEN_PROTECTOR_MODE);
 	if (ret == 0) {
-		size += scnprintf(buf, PAGE_SIZE, "result: %d\n",
+		buf_idx += scnprintf(buf, PAGE_SIZE - buf_idx, "result: %d\n",
 				cmd->setting == GTI_SCREEN_PROTECTOR_MODE_ENABLE);
 	} else {
-		size += scnprintf(buf, PAGE_SIZE, "error: %d\n", ret);
+		buf_idx += scnprintf(buf, PAGE_SIZE - buf_idx, "error: %d\n", ret);
 	}
 	GOOG_INFO("%s", buf);
-	return size;
+	return buf_idx;
 }
 
 static ssize_t self_test_show(struct device *dev,
@@ -788,21 +790,21 @@ static ssize_t self_test_show(struct device *dev,
 	memset(gti->cmd.selftest_cmd.buffer, 0, sizeof(gti->cmd.selftest_cmd.buffer));
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SELFTEST);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
 		if (gti->cmd.selftest_cmd.result == GTI_SELFTEST_RESULT_DONE) {
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 				"result: %s\n", gti->cmd.selftest_cmd.buffer);
 		} else if (gti->cmd.selftest_cmd.result ==
 				GTI_SELFTEST_RESULT_SHELL_CMDS_REDIRECT) {
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 				"redirect: %s\n", gti->cmd.selftest_cmd.buffer);
 		} else {
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "error: N/A!\n");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "error: N/A!\n");
 		}
 	}
 	GOOG_INFO("%s", buf);
@@ -821,9 +823,9 @@ static ssize_t ss_base_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
 		return buf_idx;
 	}
@@ -833,31 +835,32 @@ static ssize_t ss_base_show(struct device *dev,
 	cmd->size = 0;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "result:\n");
 		if (cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "TX:");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "TX:");
 			for (x = 0; x < tx; x++) {
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%5d,", ((s16 *)cmd->buffer)[x]);
 			}
 
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\nRX:");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\nRX:");
 			for (y = 0; y < rx; y++) {
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%5d,", ((s16 *)cmd->buffer)[tx + y]);
 			}
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			GOOG_INFO("%s", buf);
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -872,9 +875,9 @@ static ssize_t ss_diff_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
 		return buf_idx;
 	}
@@ -884,31 +887,32 @@ static ssize_t ss_diff_show(struct device *dev,
 	cmd->size = 0;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "result:\n");
 		if (cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "TX:");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "TX:");
 			for (x = 0; x < tx; x++) {
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%5d,", ((s16 *)cmd->buffer)[x]);
 			}
 
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\nRX:");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\nRX:");
 			for (y = 0; y < rx; y++) {
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%5d,", ((s16 *)cmd->buffer)[tx + y]);
 			}
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			GOOG_INFO("%s", buf);
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -923,9 +927,9 @@ static ssize_t ss_raw_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
-	ret = mutex_lock_interruptible(&gti->manual_sensing_lock);
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: has been interrupted!\n");
 		return buf_idx;
 	}
@@ -935,31 +939,32 @@ static ssize_t ss_raw_show(struct device *dev,
 	cmd->size = 0;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "result:\n");
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "result:\n");
 		if (cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "TX:");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "TX:");
 			for (x = 0; x < tx; x++) {
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%5d,", ((s16 *)cmd->buffer)[x]);
 			}
 
-			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE, "\nRX:");
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\nRX:");
 			for (y = 0; y < rx; y++) {
-				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 						"%5d,", ((s16 *)cmd->buffer)[tx + y]);
 			}
+			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			GOOG_INFO("%s", buf);
 		}
 	}
 
-	mutex_unlock(&gti->manual_sensing_lock);
+	mutex_unlock(&gti->input_process_lock);
 	return buf_idx;
 }
 
@@ -973,13 +978,13 @@ static ssize_t sensing_enabled_show(struct device *dev,
 	gti->cmd.sensing_cmd.setting = GTI_SENSING_MODE_NA;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSING_MODE);
 	if (ret == -EOPNOTSUPP) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: not supported!\n");
 	} else if (ret) {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"error: %d!\n", ret);
 	} else {
-		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", gti->cmd.sensing_cmd.setting);
 	}
 	GOOG_INFO("%s", buf);
@@ -1017,7 +1022,7 @@ static ssize_t v4l2_enabled_show(struct device *dev,
 	ssize_t buf_idx = 0;
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
-	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE,
+	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 		"result: %d\n", gti->v4l2_enabled);
 	GOOG_INFO("%s", buf);
 
@@ -1247,7 +1252,6 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
  */
 static void panel_bridge_enable(struct drm_bridge *bridge)
 {
-	int ret = 0;
 	struct goog_touch_interface *gti =
 		container_of(bridge, struct goog_touch_interface, panel_bridge);
 
@@ -1256,19 +1260,11 @@ static void panel_bridge_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	GOOG_INFO("screen-on.\n");
-
-	goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
-
-	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-	if (ret && ret != -EOPNOTSUPP)
-		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
+	goog_set_display_state(gti, GTI_DISPLAY_STATE_ON);
 }
 
 static void panel_bridge_disable(struct drm_bridge *bridge)
 {
-	int ret = 0;
 	struct goog_touch_interface *gti =
 		container_of(bridge, struct goog_touch_interface, panel_bridge);
 
@@ -1279,14 +1275,7 @@ static void panel_bridge_disable(struct drm_bridge *bridge)
 			return;
 	}
 
-	GOOG_INFO("screen-off.\n");
-
-	goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
-
-	gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-	if (ret && ret != -EOPNOTSUPP)
-		GOOG_WARN("unexpected vendor_cmd return(%d)!\n", ret);
+	goog_set_display_state(gti, GTI_DISPLAY_STATE_OFF);
 }
 
 struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
@@ -1331,16 +1320,10 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 
 		GOOG_INFO("panel_is_lp_mode changed from %d to %d.\n",
 			gti->panel_is_lp_mode, panel_is_lp_mode);
-		if (panel_is_lp_mode) {
-			goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
-			gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_OFF;
-		} else {
-			goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
-			gti->cmd.display_state_cmd.setting = GTI_DISPLAY_STATE_ON;
-		}
-		ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
-		if (ret && ret != -EOPNOTSUPP)
-			GOOG_WARN("unexpected return(%d)!", ret);
+		if (panel_is_lp_mode)
+			goog_set_display_state(gti, GTI_DISPLAY_STATE_OFF);
+		else
+			goog_set_display_state(gti, GTI_DISPLAY_STATE_ON);
 	}
 	gti->panel_is_lp_mode = panel_is_lp_mode;
 
@@ -1403,6 +1386,37 @@ static void unregister_panel_bridge(struct drm_bridge *bridge)
 /*-----------------------------------------------------------------------------
  * GTI: functions.
  */
+static void goog_set_display_state(struct goog_touch_interface *gti,
+	enum gti_display_state_setting display_state)
+{
+	int ret = 0;
+
+	if (gti->display_state == display_state)
+		return;
+
+	switch (display_state) {
+	case GTI_DISPLAY_STATE_OFF:
+		GOOG_INFO("screen-off.\n");
+		goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
+
+		break;
+	case GTI_DISPLAY_STATE_ON:
+		GOOG_INFO("screen-on.\n");
+		goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
+
+		break;
+	default:
+		GOOG_ERR("Unexpected value(0x%X) of display state parameter.\n",
+			display_state);
+		return;
+	}
+	gti->display_state = display_state;
+	gti->cmd.display_state_cmd.setting = display_state;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
+	if (ret && ret != -EOPNOTSUPP)
+		GOOG_WARN("Unexpected vendor_cmd return(%d)!\n", ret);
+}
+
 bool goog_check_spi_dma_enabled(struct spi_device *spi_dev)
 {
 	bool ret = false;
@@ -3034,8 +3048,8 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->vendor_default_handler = default_handler;
 		gti->mf_mode = GTI_MF_MODE_DEFAULT;
 		gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
+		gti->display_state = GTI_DISPLAY_STATE_ON;
 		mutex_init(&gti->input_lock);
-		mutex_init(&gti->manual_sensing_lock);
 		mutex_init(&gti->input_process_lock);
 		goog_init_options(gti, options);
 		goog_offload_probe(gti);
@@ -3092,15 +3106,23 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	if (!gti)
 		return -ENODEV;
 
-	if (gti->vendor_dev)
-		sysfs_remove_link(&gti->dev->kobj, "vendor");
-	if (gti->vendor_input_dev)
-		sysfs_remove_link(&gti->dev->kobj, "vendor_input");
+	if (gti->dev) {
+		sysfs_remove_group(&gti->dev->kobj, &goog_attr_group);
+		if (gti->vendor_dev)
+			sysfs_remove_link(&gti->dev->kobj, "vendor");
+		if (gti->vendor_input_dev)
+			sysfs_remove_link(&gti->dev->kobj, "vendor_input");
+		device_destroy(gti_class, gti->dev_id);
+		gti->dev = NULL;
+		gti_dev_num--;
+	}
 
 	if (gti_class) {
 		unregister_chrdev_region(gti->dev_id, 1);
-		device_destroy(gti_class, gti->dev_id);
-		gti_dev_num--;
+		if (!gti_dev_num) {
+			class_destroy(gti_class);
+			gti_class = NULL;
+		}
 	}
 
 	unregister_panel_bridge(&gti->panel_bridge);
@@ -3115,9 +3137,6 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	heatmap_remove(&gti->v4l2);
 	devm_kfree(gti->vendor_dev, gti->heatmap_buf);
 	devm_kfree(gti->vendor_dev, gti);
-
-	if (gti_class && !gti_dev_num)
-		class_destroy(gti_class);
 
 	return 0;
 }
