@@ -3106,15 +3106,23 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	if (!gti)
 		return -ENODEV;
 
-	if (gti->vendor_dev)
-		sysfs_remove_link(&gti->dev->kobj, "vendor");
-	if (gti->vendor_input_dev)
-		sysfs_remove_link(&gti->dev->kobj, "vendor_input");
+	if (gti->dev) {
+		sysfs_remove_group(&gti->dev->kobj, &goog_attr_group);
+		if (gti->vendor_dev)
+			sysfs_remove_link(&gti->dev->kobj, "vendor");
+		if (gti->vendor_input_dev)
+			sysfs_remove_link(&gti->dev->kobj, "vendor_input");
+		device_destroy(gti_class, gti->dev_id);
+		gti->dev = NULL;
+		gti_dev_num--;
+	}
 
 	if (gti_class) {
 		unregister_chrdev_region(gti->dev_id, 1);
-		device_destroy(gti_class, gti->dev_id);
-		gti_dev_num--;
+		if (!gti_dev_num) {
+			class_destroy(gti_class);
+			gti_class = NULL;
+		}
 	}
 
 	unregister_panel_bridge(&gti->panel_bridge);
@@ -3129,9 +3137,6 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	heatmap_remove(&gti->v4l2);
 	devm_kfree(gti->vendor_dev, gti->heatmap_buf);
 	devm_kfree(gti->vendor_dev, gti);
-
-	if (gti_class && !gti_dev_num)
-		class_destroy(gti_class);
 
 	return 0;
 }
