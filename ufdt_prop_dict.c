@@ -29,7 +29,7 @@
 #define DICT_LIMIT_DEN 3
 
 static int _ufdt_prop_dict_str_hash(const char *str) {
-  uint res = 0;
+  unsigned int res = 0;
 
   for (; *str != '\0'; str++) {
     res *= HASH_BASE;
