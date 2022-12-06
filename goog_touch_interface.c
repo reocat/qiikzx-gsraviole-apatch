@@ -149,7 +149,7 @@ static ssize_t force_active_show(
 	locked = goog_pm_wake_check_locked(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
 	buf_idx += scnprintf(buf, PAGE_SIZE - buf_idx, "result: %s\n",
 		locked ? "locked" : "unlocked");
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -162,17 +162,17 @@ static ssize_t force_active_store(struct device *dev,
 	int ret = 0;
 
 	if (buf == NULL || size < 0) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
 	if (kstrtou32(buf, 10, &locked)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
 	if (locked > 1) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
@@ -182,7 +182,7 @@ static ssize_t force_active_store(struct device *dev,
 			input_sync(gti->vendor_input_dev);
 			input_report_key(gti->vendor_input_dev, KEY_WAKEUP, false);
 			input_sync(gti->vendor_input_dev);
-			GOOG_INFO("KEY_WAKEUP triggered with %u ms delay.\n",
+			GOOG_INFO(gti, "KEY_WAKEUP triggered with %u ms delay.\n",
 				gti->wakeup_before_force_active_delay);
 			msleep(gti->wakeup_before_force_active_delay);
 		}
@@ -194,7 +194,7 @@ static ssize_t force_active_store(struct device *dev,
 	}
 
 	if (ret < 0) {
-		GOOG_INFO("error: %d!\n", ret);
+		GOOG_INFO(gti, "error: %d!\n", ret);
 		return ret;
 	}
 	return size;
@@ -220,7 +220,7 @@ static ssize_t fw_grip_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", cmd->setting | (gti->ignore_grip_update << 1));
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -234,7 +234,7 @@ static ssize_t fw_grip_store(struct device *dev,
 	bool enabled = false;
 
 	if (kstrtou32(buf, 10, &fw_grip_mode)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
@@ -243,11 +243,11 @@ static ssize_t fw_grip_store(struct device *dev,
 	gti->cmd.grip_cmd.setting = enabled ? GTI_GRIP_ENABLE : GTI_GRIP_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
 	if (ret == -EOPNOTSUPP)
-		GOOG_INFO("error: not supported!\n");
+		GOOG_INFO(gti, "error: not supported!\n");
 	else if (ret)
-		GOOG_INFO("error: %d!\n", ret);
+		GOOG_INFO(gti, "error: %d!\n", ret);
 	else
-		GOOG_INFO("fw_grip_mode: %u\n", fw_grip_mode);
+		GOOG_INFO(gti, "fw_grip_mode: %u\n", fw_grip_mode);
 
 	return size;
 }
@@ -272,7 +272,7 @@ static ssize_t fw_palm_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", cmd->setting | (gti->ignore_palm_update << 1));
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -286,7 +286,7 @@ static ssize_t fw_palm_store(struct device *dev,
 	bool enabled;
 
 	if (kstrtou32(buf, 10, &fw_palm_mode)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
@@ -295,11 +295,11 @@ static ssize_t fw_palm_store(struct device *dev,
 	gti->cmd.palm_cmd.setting = enabled ? GTI_PALM_ENABLE : GTI_PALM_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
 	if (ret == -EOPNOTSUPP)
-		GOOG_INFO("error: not supported!\n");
+		GOOG_INFO(gti, "error: not supported!\n");
 	else if (ret)
-		GOOG_INFO("error: %d!\n", ret);
+		GOOG_INFO(gti, "error: %d!\n", ret);
 	else
-		GOOG_INFO("fw_palm_mode= %u\n", fw_palm_mode);
+		GOOG_INFO(gti, "fw_palm_mode= %u\n", fw_palm_mode);
 
 	return size;
 }
@@ -323,7 +323,7 @@ static ssize_t fw_ver_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %s\n", gti->cmd.fw_version_cmd.buffer);
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -347,7 +347,7 @@ static ssize_t irq_enabled_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", gti->cmd.irq_cmd.setting);
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -360,18 +360,18 @@ static ssize_t irq_enabled_store(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
 	if (kstrtobool(buf, &enabled)) {
-		GOOG_ERR("error: invalid input!\n");
+		GOOG_ERR(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	gti->cmd.irq_cmd.setting = enabled;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_IRQ_MODE);
 	if (ret == -EOPNOTSUPP)
-		GOOG_INFO("error: not supported!\n");
+		GOOG_INFO(gti, "error: not supported!\n");
 	else if (ret)
-		GOOG_INFO("error: %d!\n", ret);
+		GOOG_INFO(gti, "error: %d!\n", ret);
 	else
-		GOOG_INFO("irq_enabled= %u\n", gti->cmd.irq_cmd.setting);
+		GOOG_INFO(gti, "irq_enabled= %u\n", gti->cmd.irq_cmd.setting);
 
 	return size;
 }
@@ -384,7 +384,7 @@ static ssize_t mf_mode_show(struct device *dev,
 
 	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 		"result: %u\n", gti->mf_mode);
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -396,23 +396,23 @@ static ssize_t mf_mode_store(struct device *dev,
 	enum gti_mf_mode mode = 0;
 
 	if (buf == NULL || size < 0) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	if (kstrtou32(buf, 10, &mode)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	if (mode < GTI_MF_MODE_UNFILTER ||
 		mode > GTI_MF_MODE_AUTO_REPORT) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	gti->mf_mode = mode;
-	GOOG_INFO("mf_mode= %u\n", gti->mf_mode);
+	GOOG_INFO(gti, "mf_mode= %u\n", gti->mf_mode);
 
 	return size;
 }
@@ -457,7 +457,7 @@ static ssize_t ms_base_show(struct device *dev,
 				}
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			}
-			GOOG_INFO("%s", buf);
+			GOOG_INFO(gti, "%s", buf);
 		}
 	}
 
@@ -505,7 +505,7 @@ static ssize_t ms_diff_show(struct device *dev,
 				}
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			}
-			GOOG_INFO("%s", buf);
+			GOOG_INFO(gti, "%s", buf);
 		}
 	}
 
@@ -553,7 +553,7 @@ static ssize_t ms_raw_show(struct device *dev,
 				}
 				buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
 			}
-			GOOG_INFO("%s", buf);
+			GOOG_INFO(gti, "%s", buf);
 		}
 	}
 
@@ -569,7 +569,7 @@ static ssize_t offload_enabled_show(struct device *dev,
 
 	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 		"result: %d\n", gti->offload_enabled);
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -580,9 +580,9 @@ static ssize_t offload_enabled_store(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
 	if (kstrtobool(buf, &gti->offload_enabled)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 	} else {
-		GOOG_INFO("offload_enabled= %d\n", gti->offload_enabled);
+		GOOG_INFO(gti, "offload_enabled= %d\n", gti->offload_enabled);
 		/* Force to turn off offload by request. */
 		if (!gti->offload_enabled)
 			goog_offload_set_running(gti, false);
@@ -612,7 +612,7 @@ static ssize_t ping_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: success.\n");
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -631,7 +631,7 @@ static ssize_t reset_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: success.\n");
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -644,31 +644,31 @@ static ssize_t reset_store(struct device *dev,
 	enum gti_reset_mode mode = 0;
 
 	if (buf == NULL || size < 0) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
 	if (kstrtou32(buf, 10, &mode)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
 	if (mode <= GTI_RESET_MODE_NOP ||
 		mode > GTI_RESET_MODE_AUTO) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return -EINVAL;
 	}
 
 	gti->cmd.reset_cmd.setting = mode;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_RESET);
 	if (ret == -EOPNOTSUPP) {
-		GOOG_INFO("error: not supported!\n");
+		GOOG_INFO(gti, "error: not supported!\n");
 		gti->cmd.reset_cmd.setting = GTI_RESET_MODE_NA;
 	} else if (ret) {
-		GOOG_INFO("error: %d!\n", ret);
+		GOOG_INFO(gti, "error: %d!\n", ret);
 		gti->cmd.reset_cmd.setting = GTI_RESET_MODE_NA;
 	} else {
-		GOOG_INFO("reset= 0x%x\n", mode);
+		GOOG_INFO(gti, "reset= 0x%x\n", mode);
 	}
 
 	return size;
@@ -693,7 +693,7 @@ static ssize_t scan_mode_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", gti->cmd.scan_cmd.setting);
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -706,29 +706,29 @@ static ssize_t scan_mode_store(struct device *dev,
 	enum gti_scan_mode mode = 0;
 
 	if (buf == NULL || size < 0) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	if (kstrtou32(buf, 10, &mode)) {
-		GOOG_ERR("error: invalid input!\n");
+		GOOG_ERR(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	if (mode < GTI_SCAN_MODE_AUTO ||
 		mode > GTI_SCAN_MODE_LP_IDLE) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	gti->cmd.scan_cmd.setting = mode;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SCAN_MODE);
 	if (ret == -EOPNOTSUPP)
-		GOOG_ERR("error: not supported!\n");
+		GOOG_ERR(gti, "error: not supported!\n");
 	else if (ret)
-		GOOG_ERR("error: %d!\n", ret);
+		GOOG_ERR(gti, "error: %d!\n", ret);
 	else
-		GOOG_INFO("scan_mode= %u\n", mode);
+		GOOG_INFO(gti, "scan_mode= %u\n", mode);
 
 	return size;
 }
@@ -742,18 +742,18 @@ static ssize_t screen_protector_mode_enabled_store(struct device *dev,
 	bool enabled = false;
 
 	if (kstrtobool(buf, &enabled)) {
-		GOOG_ERR("invalid input!\n");
+		GOOG_ERR(gti, "invalid input!\n");
 		return -EINVAL;
 	}
 
 	cmd->setting = enabled ? GTI_SCREEN_PROTECTOR_MODE_ENABLE : GTI_SCREEN_PROTECTOR_MODE_DISABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SCREEN_PROTECTOR_MODE);
 	if (ret == -EOPNOTSUPP)
-		GOOG_ERR("error: not supported!\n");
+		GOOG_ERR(gti, "error: not supported!\n");
 	else if (ret)
-		GOOG_ERR("error: %d!\n", ret);
+		GOOG_ERR(gti, "error: %d!\n", ret);
 	else
-		GOOG_INFO("enabled= %u\n", enabled);
+		GOOG_INFO(gti, "enabled= %u\n", enabled);
 	gti->screen_protector_mode_setting = enabled ?
 			GTI_SCREEN_PROTECTOR_MODE_ENABLE : GTI_SCREEN_PROTECTOR_MODE_DISABLE;
 	return size;
@@ -775,7 +775,7 @@ static ssize_t screen_protector_mode_enabled_show(struct device *dev,
 	} else {
 		buf_idx += scnprintf(buf, PAGE_SIZE - buf_idx, "error: %d\n", ret);
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 	return buf_idx;
 }
 
@@ -807,7 +807,7 @@ static ssize_t self_test_show(struct device *dev,
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "error: N/A!\n");
 		}
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -856,7 +856,7 @@ static ssize_t ss_base_show(struct device *dev,
 						"%5d,", ((s16 *)cmd->buffer)[tx + y]);
 			}
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
-			GOOG_INFO("%s", buf);
+			GOOG_INFO(gti, "%s", buf);
 		}
 	}
 
@@ -908,7 +908,7 @@ static ssize_t ss_diff_show(struct device *dev,
 						"%5d,", ((s16 *)cmd->buffer)[tx + y]);
 			}
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
-			GOOG_INFO("%s", buf);
+			GOOG_INFO(gti, "%s", buf);
 		}
 	}
 
@@ -960,7 +960,7 @@ static ssize_t ss_raw_show(struct device *dev,
 						"%5d,", ((s16 *)cmd->buffer)[tx + y]);
 			}
 			buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx, "\n");
-			GOOG_INFO("%s", buf);
+			GOOG_INFO(gti, "%s", buf);
 		}
 	}
 
@@ -987,7 +987,7 @@ static ssize_t sensing_enabled_show(struct device *dev,
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 			"result: %u\n", gti->cmd.sensing_cmd.setting);
 	}
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -1000,18 +1000,18 @@ static ssize_t sensing_enabled_store(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
 	if (kstrtobool(buf, &enabled)) {
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 		return size;
 	}
 
 	gti->cmd.sensing_cmd.setting = enabled;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SENSING_MODE);
 	if (ret == -EOPNOTSUPP)
-		GOOG_INFO("error: not supported!\n");
+		GOOG_INFO(gti, "error: not supported!\n");
 	else if (ret)
-		GOOG_INFO("error: %d!\n", ret);
+		GOOG_INFO(gti, "error: %d!\n", ret);
 	else
-		GOOG_INFO("sensing_enabled= %u\n", gti->cmd.sensing_cmd.setting);
+		GOOG_INFO(gti, "sensing_enabled= %u\n", gti->cmd.sensing_cmd.setting);
 
 	return size;
 }
@@ -1024,7 +1024,7 @@ static ssize_t v4l2_enabled_show(struct device *dev,
 
 	buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
 		"result: %d\n", gti->v4l2_enabled);
-	GOOG_INFO("%s", buf);
+	GOOG_INFO(gti, "%s", buf);
 
 	return buf_idx;
 }
@@ -1035,9 +1035,9 @@ static ssize_t v4l2_enabled_store(struct device *dev,
 	struct goog_touch_interface *gti = dev_get_drvdata(dev);
 
 	if (kstrtobool(buf, &gti->v4l2_enabled))
-		GOOG_INFO("error: invalid input!\n");
+		GOOG_INFO(gti, "error: invalid input!\n");
 	else
-		GOOG_INFO("v4l2_enabled= %d\n", gti->v4l2_enabled);
+		GOOG_INFO(gti, "v4l2_enabled= %d\n", gti->v4l2_enabled);
 
 	return size;
 }
@@ -1061,7 +1061,7 @@ inline int gti_debug_hc_pop(struct goog_touch_interface *gti,
 	struct gti_debug_health_check *fifo, unsigned int len)
 {
 	if (len > GTI_DEBUG_KFIFO_LEN) {
-		GOOG_ERR("invalid fifo pop len(%d)!\n", len);
+		GOOG_ERR(gti, "invalid fifo pop len(%d)!\n", len);
 		return -EINVAL;
 	}
 	/*
@@ -1096,7 +1096,7 @@ void gti_debug_hc_dump(struct goog_touch_interface *gti)
 	count = min_t(u64, gti->irq_index, ARRAY_SIZE(last_fifo));
 	ret = gti_debug_hc_pop(gti, last_fifo, count);
 	if (ret) {
-		GOOG_ERR("Failed to peek debug hc, err: %d\n", ret);
+		GOOG_ERR(gti, "Failed to peek debug hc, err: %d\n", ret);
 		return;
 	}
 	for (i = 0 ; i < count ; i++) {
@@ -1108,7 +1108,7 @@ void gti_debug_hc_dump(struct goog_touch_interface *gti)
 		delta = ktime_ms_delta(current_time, last_fifo[i].irq_time);
 		if (delta > 0)
 			sec_delta = div_u64_rem(delta, MSEC_PER_SEC, &ms_delta);
-		GOOG_LOG("dump-int: #%llu(%lld.%u): C#%llu(0x%lx).\n",
+		GOOG_LOG(gti, "dump-int: #%llu(%lld.%u): C#%llu(0x%lx).\n",
 			last_fifo[i].irq_index, sec_delta, ms_delta,
 			last_fifo[i].input_index, last_fifo[i].slot_bit_active);
 	}
@@ -1119,7 +1119,7 @@ inline void gti_debug_input_push(struct goog_touch_interface *gti, int slot)
 	struct gti_debug_input fifo;
 
 	if (slot < 0 || slot >= MAX_SLOTS) {
-		GOOG_ERR("Invalid slot: %d\n", slot);
+		GOOG_ERR(gti, "Invalid slot: %d\n", slot);
 		return;
 	}
 
@@ -1138,7 +1138,7 @@ inline int gti_debug_input_pop(struct goog_touch_interface *gti,
 	struct gti_debug_input *fifo, unsigned int len)
 {
 	if (len > GTI_DEBUG_KFIFO_LEN) {
-		GOOG_ERR("invalid fifo pop len(%d)!\n", len);
+		GOOG_ERR(gti, "invalid fifo pop len(%d)!\n", len);
 		return -EINVAL;
 	}
 	/*
@@ -1190,13 +1190,13 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
 	count = min_t(u64, gti->released_index, ARRAY_SIZE(last_fifo));
 	ret = gti_debug_input_pop(gti, last_fifo, count);
 	if (ret) {
-		GOOG_ERR("Failed to peek debug input, err: %d\n", ret);
+		GOOG_ERR(gti, "Failed to peek debug input, err: %d\n", ret);
 		return;
 	}
 	for (i = 0 ; i < count ; i++) {
 		if (last_fifo[i].slot < 0 ||
 			last_fifo[i].slot >= MAX_SLOTS) {
-			GOOG_INFO("dump: #%d: invalid slot #!\n", last_fifo[i].slot);
+			GOOG_INFO(gti, "dump: #%d: invalid slot #!\n", last_fifo[i].slot);
 			continue;
 		}
 		sec_delta_down = -1;
@@ -1229,20 +1229,20 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
 			}
 		}
 
-		GOOG_LOG("dump: #%d: %lld.%u(%lld.%u) D(%d, %d) I(%llu, %llu).\n",
+		GOOG_LOG(gti, "dump: #%d: %lld.%u(%lld.%u) D(%d, %d) I(%llu, %llu).\n",
 			last_fifo[i].slot,
 			sec_delta_down, ms_delta_down,
 			sec_delta_duration, ms_delta_duration,
 			px_delta_x, px_delta_y,
 			last_fifo[i].pressed.irq_index, last_fifo[i].released.irq_index);
-		GOOG_DBG("dump-dbg: #%d: P(%u, %u) -> R(%u, %u).\n\n",
+		GOOG_DBG(gti, "dump-dbg: #%d: P(%u, %u) -> R(%u, %u).\n\n",
 			last_fifo[i].slot,
 			last_fifo[i].pressed.coord.x, last_fifo[i].pressed.coord.y,
 			last_fifo[i].released.coord.x, last_fifo[i].released.coord.y);
 	}
 	/* Extra check for unexpected case. */
 	for_each_set_bit(slot, &gti->slot_bit_active, MAX_SLOTS) {
-		GOOG_INFO("slot #%d is active!\n", slot);
+		GOOG_INFO(gti, "slot #%d is active!\n", slot);
 	}
 }
 #endif /* GTI_DEBUG_KFIFO_LEN */
@@ -1256,7 +1256,7 @@ static void panel_bridge_enable(struct drm_bridge *bridge)
 		container_of(bridge, struct goog_touch_interface, panel_bridge);
 
 	if (gti->panel_is_lp_mode) {
-		GOOG_INFO("skip screen-on because of panel_is_lp_mode enabled!\n");
+		GOOG_INFO(gti, "skip screen-on because of panel_is_lp_mode enabled!\n");
 		return;
 	}
 
@@ -1318,7 +1318,7 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 	panel_is_lp_mode = panel_bridge_is_lp_mode(gti->connector);
 	if (gti->panel_is_lp_mode != panel_is_lp_mode) {
 
-		GOOG_INFO("panel_is_lp_mode changed from %d to %d.\n",
+		GOOG_INFO(gti, "panel_is_lp_mode changed from %d to %d.\n",
 			gti->panel_is_lp_mode, panel_is_lp_mode);
 		if (panel_is_lp_mode)
 			goog_set_display_state(gti, GTI_DISPLAY_STATE_OFF);
@@ -1331,13 +1331,13 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 		int vrefresh = drm_mode_vrefresh(mode);
 
 		if (gti->display_vrefresh != vrefresh) {
-			GOOG_DBG("display_vrefresh(Hz) changed to %d from %d.\n",
+			GOOG_DBG(gti, "display_vrefresh(Hz) changed to %d from %d.\n",
 				vrefresh, gti->display_vrefresh);
 			gti->display_vrefresh = vrefresh;
 			gti->cmd.display_vrefresh_cmd.setting = vrefresh;
 			ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_VREFRESH);
 			if (ret && ret != -EOPNOTSUPP)
-				GOOG_WARN("unexpected return(%d)!", ret);
+				GOOG_WARN(gti, "unexpected return(%d)!", ret);
 		}
 	}
 }
@@ -1350,7 +1350,7 @@ static const struct drm_bridge_funcs panel_bridge_funcs = {
 
 static int register_panel_bridge(struct goog_touch_interface *gti)
 {
-	GOOG_INFO("\n");
+	GOOG_INFO(gti, "\n");
 #ifdef CONFIG_OF
 	gti->panel_bridge.of_node = gti->vendor_dev->of_node;
 #endif
@@ -1362,9 +1362,11 @@ static int register_panel_bridge(struct goog_touch_interface *gti)
 
 static void unregister_panel_bridge(struct drm_bridge *bridge)
 {
+	struct goog_touch_interface *gti =
+		container_of(bridge, struct goog_touch_interface, panel_bridge);
 	struct drm_bridge *node;
 
-	GOOG_INFO("\n");
+	GOOG_INFO(gti, "\n");
 	drm_bridge_remove(bridge);
 
 	if (!bridge->dev) /* not attached */
@@ -1396,19 +1398,21 @@ static void goog_set_display_state(struct goog_touch_interface *gti,
 
 	switch (display_state) {
 	case GTI_DISPLAY_STATE_OFF:
-		GOOG_INFO("screen-off.\n");
+		GOOG_INFO(gti, "screen-off.\n");
 		ret = goog_pm_wake_unlock_nosync(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON);
-		if (ret < 0) GOOG_INFO("Error while obtaining screen_on wakelock: %d!\n", ret);
+		if (ret < 0)
+			GOOG_INFO(gti, "Error while obtaining screen-off wakelock: %d!\n", ret);
 
 		break;
 	case GTI_DISPLAY_STATE_ON:
-		GOOG_INFO("screen-on.\n");
+		GOOG_INFO(gti, "screen-on.\n");
 		ret = goog_pm_wake_lock_nosync(gti, GTI_PM_WAKELOCK_TYPE_SCREEN_ON, false);
-		if (ret < 0) GOOG_INFO("Error while obtaining screen_on wakelock: %d!\n", ret);
+		if (ret < 0)
+			GOOG_INFO(gti, "Error while obtaining screen-on wakelock: %d!\n", ret);
 
 		break;
 	default:
-		GOOG_ERR("Unexpected value(0x%X) of display state parameter.\n",
+		GOOG_ERR(gti, "Unexpected value(0x%X) of display state parameter.\n",
 			display_state);
 		return;
 	}
@@ -1416,7 +1420,7 @@ static void goog_set_display_state(struct goog_touch_interface *gti,
 	gti->cmd.display_state_cmd.setting = display_state;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
 	if (ret && ret != -EOPNOTSUPP)
-		GOOG_WARN("Unexpected vendor_cmd return(%d)!\n", ret);
+		GOOG_WARN(gti, "Unexpected vendor_cmd return(%d)!\n", ret);
 }
 
 bool goog_check_spi_dma_enabled(struct spi_device *spi_dev)
@@ -1542,7 +1546,7 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 
 	/* Take unsupported cmd_type as debug logs for compatibility check. */
 	if (ret == -EOPNOTSUPP) {
-		GOOG_DBG("unsupported request cmd_type %#x!\n", cmd_type);
+		GOOG_DBG(gti, "unsupported request cmd_type %#x!\n", cmd_type);
 		ret = 0;
 	}
 
@@ -1607,7 +1611,7 @@ void goog_update_motion_filter(struct goog_touch_interface *gti, unsigned long s
 
 		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_CONTINUOUS_REPORT);
 		if (ret)
-			GOOG_WARN("unexpected return(%d)!", ret);
+			GOOG_WARN(gti, "unexpected return(%d)!", ret);
 	}
 
 	gti->mf_state = next_state;
@@ -1623,7 +1627,7 @@ bool goog_v4l2_read_frame_cb(struct v4l2_heatmap *v4l2)
 		memcpy(v4l2->frame, gti->heatmap_buf, v4l2_size);
 		ret = true;
 	} else {
-		GOOG_ERR("wrong pointer(%p) or size (W: %lu, H: %lu) vs %u\n",
+		GOOG_ERR(gti, "wrong pointer(%p) or size (W: %lu, H: %lu) vs %u\n",
 		gti->heatmap_buf, gti->v4l2.width, gti->v4l2.height, gti->heatmap_buf_size);
 	}
 
@@ -1643,7 +1647,7 @@ void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 	struct TouchOffloadDataCoord *dc;
 
 	if (channel < 0 || channel >= MAX_CHANNELS) {
-		GOOG_ERR("Invalid channel: %d\n", channel);
+		GOOG_ERR(gti, "Invalid channel: %d\n", channel);
 		return;
 	}
 
@@ -1669,7 +1673,7 @@ void goog_offload_populate_mutual_channel(struct goog_touch_interface *gti,
 	struct TouchOffloadData2d *mutual;
 
 	if (channel < 0 || channel >= MAX_CHANNELS) {
-		GOOG_ERR("Invalid channel: %d\n", channel);
+		GOOG_ERR(gti, "Invalid channel: %d\n", channel);
 		return;
 	}
 
@@ -1689,7 +1693,7 @@ void goog_offload_populate_self_channel(struct goog_touch_interface *gti,
 	struct TouchOffloadData1d *self;
 
 	if (channel < 0 || channel >= MAX_CHANNELS) {
-		GOOG_ERR("Invalid channel: %d\n", channel);
+		GOOG_ERR(gti, "Invalid channel: %d\n", channel);
 		return;
 	}
 
@@ -1781,7 +1785,7 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	/* Populate all channels */
 	for (i = 0; i < frame->num_channels; i++) {
 		channel_type = frame->channel_type[i];
-		GOOG_DBG("#%d: get data(type %#x) from vendor driver", i, channel_type);
+		GOOG_DBG(gti, "#%d: get data(type %#x) from vendor driver", i, channel_type);
 		ret = 0;
 		cmd->buffer = NULL;
 		cmd->size = 0;
@@ -1843,11 +1847,12 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 			}
 			ATRACE_END();
 		} else {
-			GOOG_ERR("%s - unrecognized channel_type = %u\n", __func__, channel_type);
+			GOOG_ERR(gti, "%s - unrecognized channel_type = %u\n",
+				__func__, channel_type);
 		}
 
 		if (ret) {
-			GOOG_DBG("skip to populate data(type %#x, ret %d)!\n",
+			GOOG_DBG(gti, "skip to populate data(type %#x, ret %d)!\n",
 				channel_type, ret);
 		}
 	}
@@ -1865,7 +1870,7 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 			gti->cmd.grip_cmd.setting = gti->default_grip_enabled;
 		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_GRIP_MODE);
 		if (ret)
-			GOOG_WARN("unexpected return(%d)!", ret);
+			GOOG_WARN(gti, "unexpected return(%d)!", ret);
 	}
 
 	if(!gti->ignore_palm_update) {
@@ -1875,26 +1880,26 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 			gti->cmd.palm_cmd.setting = gti->default_palm_enabled;
 		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
 		if (ret)
-			GOOG_WARN("unexpected return(%d)!", ret);
+			GOOG_WARN(gti, "unexpected return(%d)!", ret);
 	}
 
 	gti->cmd.screen_protector_mode_cmd.setting = gti->screen_protector_mode_setting;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_SCREEN_PROTECTOR_MODE);
 	if (ret != 0)
-		GOOG_ERR("Failed to %s screen protector mode!\n",
-				gti->screen_protector_mode_setting == GTI_SCREEN_PROTECTOR_MODE_ENABLE ?
-				"enable" : "disable");
+		GOOG_ERR(gti, "Failed to %s screen protector mode!\n",
+			gti->screen_protector_mode_setting == GTI_SCREEN_PROTECTOR_MODE_ENABLE ?
+			"enable" : "disable");
 
 	gti->cmd.heatmap_cmd.setting = GTI_HEATMAP_ENABLE;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_HEATMAP_ENABLED);
 	if (ret != 0)
-		GOOG_ERR("Failed to enable heatmap!\n");
+		GOOG_ERR(gti, "Failed to enable heatmap!\n");
 }
 
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
 {
 	if (gti->offload.offload_running != running) {
-		GOOG_LOG("Offload state Changed: %d", running);
+		GOOG_LOG(gti, "Offload state Changed: %d", running);
 		gti->offload.offload_running = running;
 		goog_update_fw_settings(gti);
 	}
@@ -1963,14 +1968,14 @@ void goog_offload_input_report(void *handle,
 
 	error = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT, true);
 	if (error < 0) {
-		GOOG_WARN("Error while obtaining OFFLOAD_REPORT wakelock: %d!\n", error);
+		GOOG_WARN(gti, "Error while obtaining OFFLOAD_REPORT wakelock: %d!\n", error);
 		ATRACE_END();
 		return;
 	}
 	goog_update_motion_filter(gti, slot_bit_active);
 	error = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT);
 	if (error < 0)
-		GOOG_WARN("Error while releasing OFFLOAD_REPORT wakelock: %d!\n", error);
+		GOOG_WARN(gti, "Error while releasing OFFLOAD_REPORT wakelock: %d!\n", error);
 	ATRACE_END();
 }
 
@@ -1979,19 +1984,19 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	int ret;
 	u16 values[2];
 	struct device_node *np = gti->vendor_dev->of_node;
-	const char *dev_name = NULL;
+	const char *offload_dev_name = NULL;
 
 	/*
 	 * TODO(b/201610482): rename DEVICE_NAME in touch_offload.h for more specific.
 	 */
-	if (!of_property_read_string(np, "goog,offload-device-name", &dev_name)) {
+	if (!of_property_read_string(np, "goog,offload-device-name", &offload_dev_name)) {
 		scnprintf(gti->offload.device_name, sizeof(gti->offload.device_name),
-			"%s_%s", DEVICE_NAME, dev_name);
+			"%s_%s", DEVICE_NAME, offload_dev_name);
 	}
 
 	if (of_property_read_u8_array(np, "goog,touch_offload_id",
 					  gti->offload_id_byte, 4)) {
-		GOOG_INFO("set default offload id: GOOG!\n");
+		GOOG_INFO(gti, "set default offload id: GOOG!\n");
 		gti->offload_id_byte[0] = 'G';
 		gti->offload_id_byte[1] = 'O';
 		gti->offload_id_byte[2] = 'O';
@@ -2007,7 +2012,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload.caps.display_width = values[0];
 		gti->offload.caps.display_height = values[1];
 	} else {
-		GOOG_ERR("Please set \"goog,display-resolution\" in dts!");
+		GOOG_ERR(gti, "Please set \"goog,display-resolution\" in dts!");
 	}
 
 	if (of_property_read_u16_array(np, "goog,channel-num",
@@ -2015,7 +2020,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload.caps.tx_size = values[0];
 		gti->offload.caps.rx_size = values[1];
 	} else {
-		GOOG_ERR("Please set \"goog,channel-num\" in dts!");
+		GOOG_ERR(gti, "Please set \"goog,channel-num\" in dts!");
 		ret = -EINVAL;
 		goto err_offload_probe;
 	}
@@ -2044,7 +2049,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 			&gti->offload.caps.context_channel_types)) {
 		gti->offload.caps.context_channel_types = 0;
 	}
-	GOOG_INFO("offload.caps: data_types %#x, scan_types %#x, context_channel_types %#x.\n",
+	GOOG_INFO(gti, "offload.caps: data_types %#x, scan_types %#x, context_channel_types %#x.\n",
 		gti->offload.caps.touch_data_types,
 		gti->offload.caps.touch_scan_types,
 		gti->offload.caps.context_channel_types);
@@ -2064,16 +2069,16 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	gti->offload.report_cb = goog_offload_input_report;
 	ret = touch_offload_init(&gti->offload);
 	if (ret) {
-		GOOG_ERR("offload init failed, ret %d!\n", ret);
+		GOOG_ERR(gti, "offload init failed, ret %d!\n", ret);
 		goto err_offload_probe;
 	}
 
 	gti->offload_enabled = of_property_read_bool(np, "goog,offload-enabled");
-	GOOG_INFO("offload.caps: display W/H: %d * %d (Tx/Rx: %d * %d).\n",
+	GOOG_INFO(gti, "offload.caps: display W/H: %d * %d (Tx/Rx: %d * %d).\n",
 		gti->offload.caps.display_width, gti->offload.caps.display_height,
 		gti->offload.caps.tx_size, gti->offload.caps.rx_size);
 
-	GOOG_INFO("offload ID: \"%c%c%c%c\" / 0x%08X, offload_enabled=%d.\n",
+	GOOG_INFO(gti, "offload ID: \"%c%c%c%c\" / 0x%08X, offload_enabled=%d.\n",
 		gti->offload_id_byte[0], gti->offload_id_byte[1], gti->offload_id_byte[2],
 		gti->offload_id_byte[3], gti->offload_id, gti->offload_enabled);
 
@@ -2085,7 +2090,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	gti->heatmap_buf_size = gti->offload.caps.tx_size * gti->offload.caps.rx_size * sizeof(u16);
 	gti->heatmap_buf = devm_kzalloc(gti->vendor_dev, gti->heatmap_buf_size, GFP_KERNEL);
 	if (!gti->heatmap_buf) {
-		GOOG_ERR("heamap alloc failed!\n");
+		GOOG_ERR(gti, "heamap alloc failed!\n");
 		ret = -ENOMEM;
 		goto err_offload_probe;
 	}
@@ -2110,11 +2115,11 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 
 	ret = heatmap_probe(&gti->v4l2);
 	if (ret) {
-		GOOG_ERR("v4l2 init failed, ret %d!\n", ret);
+		GOOG_ERR(gti, "v4l2 init failed, ret %d!\n", ret);
 		goto err_offload_probe;
 	}
 	gti->v4l2_enabled = of_property_read_bool(np, "goog,v4l2-enabled");
-	GOOG_INFO("v4l2 W/H=(%lu, %lu), v4l2_enabled=%d.\n",
+	GOOG_INFO(gti, "v4l2 W/H=(%lu, %lu), v4l2_enabled=%d.\n",
 		gti->v4l2.width, gti->v4l2.height, gti->v4l2_enabled);
 
 err_offload_probe:
@@ -2157,7 +2162,7 @@ int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq)
 	if (gti->offload_enabled) {
 		ret = touch_offload_reserve_frame(&gti->offload, frame);
 		if (ret != 0 || frame == NULL) {
-			GOOG_ERR("could not reserve a frame(ret %d)!\n", ret);
+			GOOG_ERR(gti, "could not reserve a frame(ret %d)!\n", ret);
 			/* Stop offload when there are no buffers available. */
 			goog_offload_set_running(gti, false);
 			/*
@@ -2171,7 +2176,7 @@ int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq)
 			goog_offload_populate_frame(gti, *frame, report_from_irq);
 			ret = touch_offload_queue_frame(&gti->offload, *frame);
 			if (ret)
-				GOOG_ERR("failed to queue reserved frame(ret %d)!\n", ret);
+				GOOG_ERR(gti, "failed to queue reserved frame(ret %d)!\n", ret);
 			else
 				gti->offload_frame = NULL;
 		}
@@ -2234,7 +2239,7 @@ void goog_input_mt_slot(
 		struct input_dev *dev, int slot)
 {
 	if (slot < 0 || slot >= MAX_SLOTS) {
-		GOOG_ERR("Invalid slot: %d\n", slot);
+		GOOG_ERR(gti, "Invalid slot: %d\n", slot);
 		return;
 	}
 
@@ -2247,7 +2252,7 @@ void goog_input_mt_slot(
 	 * This is for input report switch between offload and legacy.
 	 */
 	if (!gti->slot_bit_in_use && !gti->input_timestamp_changed)
-		GOOG_ERR("please exec goog_input_set_timestamp before %s!\n", __func__);
+		GOOG_ERR(gti, "please exec goog_input_set_timestamp before %s!\n", __func__);
 	set_bit(slot, &gti->slot_bit_in_use);
 }
 EXPORT_SYMBOL(goog_input_mt_slot);
@@ -2354,10 +2359,10 @@ void goog_register_tbn(struct goog_touch_interface *gti)
 	gti->tbn_enabled = of_property_read_bool(np, "goog,tbn-enabled");
 	if (gti->tbn_enabled) {
 		if (register_tbn(&gti->tbn_register_mask)) {
-			GOOG_ERR("failed to register tbn context!\n");
+			GOOG_ERR(gti, "failed to register tbn context!\n");
 			gti->tbn_enabled = false;
 		} else {
-			GOOG_INFO("tbn_register_mask = %#x.\n", gti->tbn_register_mask);
+			GOOG_INFO(gti, "tbn_register_mask = %#x.\n", gti->tbn_register_mask);
 		}
 	}
 }
@@ -2673,7 +2678,7 @@ int goog_pm_wake_lock_nosync(struct goog_touch_interface *gti,
 	mutex_lock(&pm->lock_mutex);
 
 	if (pm->locks & type) {
-		GOOG_DBG("unexpectedly lock: locks=0x%04X, type=0x%04X\n",
+		GOOG_DBG(gti, "unexpectedly lock: locks=0x%04X, type=0x%04X\n",
 				pm->locks, type);
 		mutex_unlock(&pm->lock_mutex);
 		return -EINVAL;
@@ -2734,7 +2739,7 @@ int goog_pm_wake_unlock_nosync(struct goog_touch_interface *gti,
 	mutex_lock(&pm->lock_mutex);
 
 	if (!(pm->locks & type)) {
-		GOOG_DBG("unexpectedly unlock: locks=0x%04X, type=0x%04X\n",
+		GOOG_DBG(gti, "unexpectedly unlock: locks=0x%04X, type=0x%04X\n",
 				pm->locks, type);
 		mutex_unlock(&pm->lock_mutex);
 		return -EINVAL;
@@ -2797,11 +2802,11 @@ static void goog_pm_suspend(struct gti_pm *pm)
 
 	/* exit directly if device is already in suspend state */
 	if (pm->state == GTI_PM_SUSPEND) {
-		GOOG_WARN("GTI already suspended!\n");
+		GOOG_WARN(gti, "GTI already suspended!\n");
 		return;
 	}
 
-	GOOG_INFO("irq_index: %llu, input_index: %llu.\n", gti->irq_index, gti->input_index);
+	GOOG_INFO(gti, "irq_index: %llu, input_index: %llu.\n", gti->irq_index, gti->input_index);
 	pm->state = GTI_PM_SUSPEND;
 
 	if (pm->suspend)
@@ -2810,7 +2815,7 @@ static void goog_pm_suspend(struct gti_pm *pm)
 	if (gti->tbn_register_mask) {
 		ret = tbn_release_bus(gti->tbn_register_mask);
 		if (ret)
-			GOOG_ERR("tbn_release_bus failed, ret %d!\n", ret);
+			GOOG_ERR(gti, "tbn_release_bus failed, ret %d!\n", ret);
 	}
 	gti_debug_hc_dump(gti);
 	gti_debug_input_dump(gti);
@@ -2829,7 +2834,7 @@ static void goog_pm_resume(struct gti_pm *pm)
 
 	/* exit directly if device isn't in suspend state */
 	if (pm->state == GTI_PM_RESUME) {
-		GOOG_WARN("GTI already resumed!\n");
+		GOOG_WARN(gti, "GTI already resumed!\n");
 		return;
 	}
 	pm->state = GTI_PM_RESUME;
@@ -2839,7 +2844,7 @@ static void goog_pm_resume(struct gti_pm *pm)
 	if (gti->tbn_register_mask) {
 		ret = tbn_request_bus(gti->tbn_register_mask);
 		if (ret)
-			GOOG_ERR("tbn_request_bus failed, ret %d!\n", ret);
+			GOOG_ERR(gti, "tbn_request_bus failed, ret %d!\n", ret);
 	}
 
 	if (pm->resume)
@@ -2894,30 +2899,30 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 {
 	switch (status) {
 	case GTI_FW_STATUS_RESET:
-		GOOG_INFO("Firmware has been reset\n");
+		GOOG_INFO(gti, "Firmware has been reset\n");
 		goog_input_release_all_fingers(gti);
 		goog_update_fw_settings(gti);
 		break;
 	case GTI_FW_STATUS_PALM_ENTER:
-		GOOG_INFO("Enter palm mode\n");
+		GOOG_INFO(gti, "Enter palm mode\n");
 		break;
 	case GTI_FW_STATUS_PALM_EXIT:
-		GOOG_INFO("Exit palm mode\n");
+		GOOG_INFO(gti, "Exit palm mode\n");
 		break;
 	case GTI_FW_STATUS_GRIP_ENTER:
-		GOOG_INFO("Enter grip mode\n");
+		GOOG_INFO(gti, "Enter grip mode\n");
 		break;
 	case GTI_FW_STATUS_GRIP_EXIT:
-		GOOG_INFO("Exit grip mode\n");
+		GOOG_INFO(gti, "Exit grip mode\n");
 		break;
 	case GTI_FW_STATUS_NOISE_MODE:
 		if (data == NULL) {
-			GOOG_INFO("Noise level is changed, level: unknown\n");
+			GOOG_INFO(gti, "Noise level is changed, level: unknown\n");
 		} else {
 			if (data->noise_level == GTI_NOISE_MODE_EXIT) {
-				GOOG_INFO("Exit noise mode\n");
+				GOOG_INFO(gti, "Exit noise mode\n");
 			} else {
-				GOOG_INFO("Enter noise mode, level: %d\n", data->noise_level);
+				GOOG_INFO(gti, "Enter noise mode, level: %d\n", data->noise_level);
 			}
 		}
 		break;
@@ -2937,7 +2942,7 @@ static int goog_pm_probe(struct goog_touch_interface *gti)
 	pm->event_wq = alloc_workqueue(
 		"gti_pm_wq", WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
 	if (!pm->event_wq) {
-		GOOG_ERR("Failed to create work thread for pm!\n");
+		GOOG_ERR(gti, "Failed to create work thread for pm!\n");
 		ret = -ENOMEM;
 		goto err_alloc_workqueue;
 	}
@@ -3066,7 +3071,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 	struct goog_touch_interface *gti;
 
 	if (!dev || !input_dev || !default_handler) {
-		GOOG_ERR("invalid dev/input_dev or default_handler!\n");
+		pr_err("%s: error: invalid dev/input_dev or default_handler!\n", __func__);
 		return NULL;
 	}
 
@@ -3081,13 +3086,6 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->display_state = GTI_DISPLAY_STATE_ON;
 		mutex_init(&gti->input_lock);
 		mutex_init(&gti->input_process_lock);
-		goog_init_options(gti, options);
-		goog_offload_probe(gti);
-		goog_init_input(gti);
-		goog_update_fw_settings(gti);
-		goog_register_tbn(gti);
-		goog_pm_probe(gti);
-		register_panel_bridge(gti);
 	}
 
 	if (!gti_class)
@@ -3102,19 +3100,22 @@ struct goog_touch_interface *goog_touch_interface_probe(
 					gti->dev_id, gti, name);
 			if (gti->dev) {
 				gti_dev_num++;
-				GOOG_INFO("device create \"%s\".\n", name);
+				GOOG_INFO(gti, "device create \"%s\".\n", name);
 				if (gti->vendor_dev) {
 					ret = sysfs_create_link(&gti->dev->kobj,
 						&gti->vendor_dev->kobj, "vendor");
-					if (ret)
-						GOOG_ERR("sysfs_create_link() failed for vendor, ret=%d!\n", ret);
+					if (ret) {
+						GOOG_ERR(gti, "sysfs_create_link() failed for vendor, ret=%d!\n",
+							ret);
+					}
 				}
 				if (gti->vendor_input_dev) {
 					ret = sysfs_create_link(&gti->dev->kobj,
 						&gti->vendor_input_dev->dev.kobj, "vendor_input");
-					if (ret)
-						GOOG_ERR("sysfs_create_link() failed for vendor_input, ret=%d!\n",
+					if (ret) {
+						GOOG_ERR(gti, "sysfs_create_link() failed for vendor_input, ret=%d!\n",
 							 ret);
+					}
 				}
 			}
 		}
@@ -3122,9 +3123,17 @@ struct goog_touch_interface *goog_touch_interface_probe(
 	}
 
 	if (gti && gti->dev) {
+		goog_init_options(gti, options);
+		goog_offload_probe(gti);
+		goog_init_input(gti);
+		goog_update_fw_settings(gti);
+		goog_register_tbn(gti);
+		goog_pm_probe(gti);
+		register_panel_bridge(gti);
+
 		ret = sysfs_create_group(&gti->dev->kobj, &goog_attr_group);
 		if (ret)
-			GOOG_ERR("sysfs_create_group() failed, ret= %d!\n", ret);
+			GOOG_ERR(gti, "sysfs_create_group() failed, ret= %d!\n", ret);
 	}
 
 	return gti;
