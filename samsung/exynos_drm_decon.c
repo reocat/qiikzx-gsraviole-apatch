@@ -1547,6 +1547,7 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 	struct exynos_drm_private *priv = drm_to_exynos_dev(drm_dev);
 	struct drm_plane *default_plane;
 	int i;
+	char symlink_name_buffer[7];
 
 	decon->drm_dev = drm_dev;
 
@@ -1591,6 +1592,11 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 		decon->bts.ops->init(decon);
 	}
 
+	/* Create symlink to decon device */
+	snprintf(symlink_name_buffer, 7, "decon%d", decon->id);
+	sysfs_create_link(&decon->drm_dev->dev->kobj, &decon->dev->kobj,
+			  (const char *) symlink_name_buffer);
+
 	device_create_file(dev, &dev_attr_early_wakeup);
 	decon_debug(decon, "%s -\n", __func__);
 	return 0;
@@ -1599,9 +1605,15 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 static void decon_unbind(struct device *dev, struct device *master,
 			void *data)
 {
+	char symlink_name_buffer[7];
 	struct decon_device *decon = dev_get_drvdata(dev);
-
 	decon_debug(decon, "%s +\n", __func__);
+
+	/* Remove symlink to decon device */
+	snprintf(symlink_name_buffer, 7, "decon%d", decon->id);
+	sysfs_remove_link(&decon->drm_dev->dev->kobj,
+			  (const char *) symlink_name_buffer);
+
 	device_remove_file(dev, &dev_attr_early_wakeup);
 	if (IS_ENABLED(CONFIG_EXYNOS_BTS))
 		decon->bts.ops->deinit(decon);
