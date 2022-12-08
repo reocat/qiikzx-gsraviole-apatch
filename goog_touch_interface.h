@@ -158,6 +158,7 @@ enum gti_pm_wakelock_type : u32 {
 	GTI_PM_WAKELOCK_TYPE_SYSFS = (1 << 3),
 	GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE = (1 << 4),
 	GTI_PM_WAKELOCK_TYPE_BUGREPORT = (1 << 5),
+	GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT = (1 << 6),
 };
 
 enum gti_reset_mode : u32 {
@@ -479,26 +480,27 @@ struct gti_optional_configuration {
 
 /**
  * struct gti_pm - power manager for GTI.
- * @suspend_work: a work to run suspend.
- * @resume_work: a work to run resume.
+ * @state_update_work: a work to update pm state.
  * @event_wq: a work queue to run suspend/resume work.
- * @bus_resumed: a completion for waiting for resume is done.
  * @locks: the lock state.
  * @lock_mutex: protect the lock state.
  * @state: GTI pm state.
+ * @new_state: New GTI pm state to be updated to.
+ * @enabled: Boolean value to represent if GTI PM is active.
+ * @update_state: Boolean value if state needs to be updated.
  * @resume: callback for notifying resume.
  * @suspend: callback for notifying suspend.
  */
 struct gti_pm {
-	struct work_struct suspend_work;
-	struct work_struct resume_work;
+	struct work_struct state_update_work;
 	struct workqueue_struct *event_wq;
-	struct completion bus_resumed;
 
 	u32 locks;
 	struct mutex lock_mutex;
 	enum gti_pm_state state;
+	enum gti_pm_state new_state;
 	bool enabled;
+	bool update_state;
 
 	int (*resume)(struct device *dev);
 	int (*suspend)(struct device *dev);
@@ -597,6 +599,7 @@ struct goog_touch_interface {
 	u32 decrease_report_rate_delay;
 
 	int display_vrefresh;
+	enum gti_display_state_setting display_state;
 	enum gti_mf_mode mf_mode;
 	enum gti_mf_state mf_state;
 	enum gti_screen_protector_mode screen_protector_mode_setting;
@@ -616,8 +619,8 @@ struct goog_touch_interface {
 	bool wakeup_before_force_active_enabled;
 	unsigned int wakeup_before_force_active_delay;
 	union {
-	u8 offload_id_byte[4];
-	u32 offload_id;
+		u8 offload_id_byte[4];
+		u32 offload_id;
 	};
 	u8 *heatmap_buf;
 	u32 heatmap_buf_size;
@@ -687,8 +690,12 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		struct gti_optional_configuration *options);
 int goog_touch_interface_remove(struct goog_touch_interface *gti);
 
+int goog_pm_wake_lock_nosync(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type, bool skip_pm_resume);
 int goog_pm_wake_lock(struct goog_touch_interface *gti,
  enum gti_pm_wakelock_type type, bool skip_pm_resume);
+int goog_pm_wake_unlock_nosync(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type);
 int goog_pm_wake_unlock(struct goog_touch_interface *gti,
  enum gti_pm_wakelock_type type);
 bool goog_pm_wake_check_locked(struct goog_touch_interface *gti,
