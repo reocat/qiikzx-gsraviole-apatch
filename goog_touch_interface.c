@@ -1847,8 +1847,7 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 			}
 			ATRACE_END();
 		} else {
-			GOOG_ERR(gti, "%s - unrecognized channel_type = %u\n",
-				__func__, channel_type);
+			GOOG_ERR(gti, "unrecognized channel_type %#x.\n", channel_type);
 		}
 
 		if (ret) {
@@ -2264,7 +2263,8 @@ void goog_input_mt_report_slot_state(
 	if (goog_input_legacy_report(gti))
 		input_mt_report_slot_state(dev, tool_type, active);
 
-	if (tool_type == MT_TOOL_FINGER) {
+	switch (tool_type) {
+	case MT_TOOL_FINGER:
 		if (active) {
 			gti->offload.coords[gti->slot].status = COORD_STATUS_FINGER;
 			if (!test_and_set_bit(gti->slot,
@@ -2278,7 +2278,16 @@ void goog_input_mt_report_slot_state(
 				set_bit(gti->slot, &gti->slot_bit_changed);
 			}
 		}
+		break;
+
+	default:
+		if (!goog_input_legacy_report(gti)) {
+			GOOG_WARN(gti, "unexcepted input tool_type(%#x) active(%d)!\n",
+				tool_type, active);
+		}
+		break;
 	}
+
 }
 EXPORT_SYMBOL(goog_input_mt_report_slot_state);
 
