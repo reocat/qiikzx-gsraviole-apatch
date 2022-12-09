@@ -202,13 +202,21 @@ struct ufdt_node *ufdt_get_node_by_path_len(struct ufdt *tree, const char *path,
     const char *alias_path =
         ufdt_node_get_fdt_prop_data(aliases_node, &path_len);
 
-    if (alias_path == NULL) {
-      dto_error("Failed to find alias %s\n", path);
+    if (alias_path == NULL || path_len == 0) {
+      dto_error("Failed to find valid alias %s\n", path);
+      return NULL;
+    }
+
+    /* property data must be a nul terminated string */
+    int alias_len = strnlen(alias_path, path_len);
+
+    if (alias_len != path_len - 1 || alias_len == 0) {
+      dto_error("Invalid alias for %s\n", path);
       return NULL;
     }
 
     struct ufdt_node *target_node =
-        ufdt_node_get_node_by_path_len(tree->root, alias_path, path_len);
+        ufdt_node_get_node_by_path_len(tree->root, alias_path, alias_len);
 
     return ufdt_node_get_node_by_path_len(target_node, next_slash,
                                           end - next_slash);
@@ -298,11 +306,16 @@ struct ufdt *ufdt_from_fdt(void *fdtp, size_t fdt_size,
     return ufdt_construct(NULL, pool);
   }
 
+  int end_offset;
+  int start_tag = fdt_next_tag(fdtp, start_offset, &end_offset);
+
+  if (start_tag != FDT_BEGIN_NODE) {
+    return ufdt_construct(NULL, pool);
+  }
+
   struct ufdt *res_tree = ufdt_construct(fdtp, pool);
   if (res_tree == NULL) return NULL;
 
-  int end_offset;
-  int start_tag = fdt_next_tag(fdtp, start_offset, &end_offset);
   res_tree->root =
       fdt_to_ufdt_tree(fdtp, start_offset, &end_offset, start_tag, pool);
 
