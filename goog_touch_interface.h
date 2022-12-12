@@ -18,15 +18,15 @@
 #include "touch_offload.h"
 #include "uapi/input/touch_offload.h"
 
-#define GOOG_LOG_NAME "GTI"
-#define GOOG_DBG(fmt, args...)    pr_debug("[%s] %s: " fmt, GOOG_LOG_NAME,\
+#define GOOG_LOG_NAME(gti) ((gti && gti->dev) ? dev_name(gti->dev) : "GTI")
+#define GOOG_DBG(gti, fmt, args...)    pr_debug("[%s] %s: " fmt, GOOG_LOG_NAME(gti),\
 					__func__, ##args)
-#define GOOG_LOG(fmt, args...)    pr_info("[%s] " fmt, GOOG_LOG_NAME, ##args)
-#define GOOG_INFO(fmt, args...)    pr_info("[%s] %s: " fmt, GOOG_LOG_NAME,\
+#define GOOG_LOG(gti, fmt, args...)    pr_info("[%s] " fmt, GOOG_LOG_NAME(gti), ##args)
+#define GOOG_INFO(gti, fmt, args...)	pr_info("[%s] %s: " fmt, GOOG_LOG_NAME(gti),\
 					__func__, ##args)
-#define GOOG_WARN(fmt, args...)    pr_warn("[%s] %s: " fmt, GOOG_LOG_NAME,\
+#define GOOG_WARN(gti, fmt, args...)    pr_warn("[%s] %s: " fmt, GOOG_LOG_NAME(gti),\
 					__func__, ##args)
-#define GOOG_ERR(fmt, args...)    pr_err("[%s] %s: " fmt, GOOG_LOG_NAME,\
+#define GOOG_ERR(gti, fmt, args...)    pr_err("[%s] %s: " fmt, GOOG_LOG_NAME(gti),\
 					__func__, ##args)
 #define MAX_SLOTS 10
 
@@ -157,6 +157,7 @@ enum gti_pm_wakelock_type : u32 {
 	GTI_PM_WAKELOCK_TYPE_SYSFS = (1 << 3),
 	GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE = (1 << 4),
 	GTI_PM_WAKELOCK_TYPE_BUGREPORT = (1 << 5),
+	GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT = (1 << 6),
 };
 
 enum gti_reset_mode : u32 {
@@ -468,26 +469,27 @@ struct gti_optional_configuration {
 
 /**
  * struct gti_pm - power manager for GTI.
- * @suspend_work: a work to run suspend.
- * @resume_work: a work to run resume.
+ * @state_update_work: a work to update pm state.
  * @event_wq: a work queue to run suspend/resume work.
- * @bus_resumed: a completion for waiting for resume is done.
  * @locks: the lock state.
  * @lock_mutex: protect the lock state.
  * @state: GTI pm state.
+ * @new_state: New GTI pm state to be updated to.
+ * @enabled: Boolean value to represent if GTI PM is active.
+ * @update_state: Boolean value if state needs to be updated.
  * @resume: callback for notifying resume.
  * @suspend: callback for notifying suspend.
  */
 struct gti_pm {
-	struct work_struct suspend_work;
-	struct work_struct resume_work;
+	struct work_struct state_update_work;
 	struct workqueue_struct *event_wq;
-	struct completion bus_resumed;
 
 	u32 locks;
 	struct mutex lock_mutex;
 	enum gti_pm_state state;
+	enum gti_pm_state new_state;
 	bool enabled;
+	bool update_state;
 
 	int (*resume)(struct device *dev);
 	int (*suspend)(struct device *dev);
@@ -658,8 +660,12 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		struct gti_optional_configuration *options);
 int goog_touch_interface_remove(struct goog_touch_interface *gti);
 
+int goog_pm_wake_lock_nosync(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type, bool skip_pm_resume);
 int goog_pm_wake_lock(struct goog_touch_interface *gti,
  enum gti_pm_wakelock_type type, bool skip_pm_resume);
+int goog_pm_wake_unlock_nosync(struct goog_touch_interface *gti,
+ enum gti_pm_wakelock_type type);
 int goog_pm_wake_unlock(struct goog_touch_interface *gti,
  enum gti_pm_wakelock_type type);
 bool goog_pm_wake_check_locked(struct goog_touch_interface *gti,
