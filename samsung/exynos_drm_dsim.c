@@ -56,6 +56,8 @@
 #include <regs-dsim.h>
 
 #include <trace/dpu_trace.h>
+#define CREATE_TRACE_POINTS
+#include <trace/panel_trace.h>
 
 #include "exynos_drm_connector.h"
 #include "exynos_drm_crtc.h"
@@ -63,6 +65,12 @@
 #include "exynos_drm_dsim.h"
 
 struct dsim_device *dsim_drvdata[MAX_DSI_CNT];
+
+/*
+ * This global mutex lock protects to initialize or de-initialize DSIM and DPHY
+ * hardware when multi display is in operation
+ */
+DEFINE_MUTEX(g_dsim_lock);
 
 #define PANEL_DRV_LEN 64
 #define RETRY_READ_FIFO_MAX 10
@@ -238,8 +246,10 @@ static void _dsim_exit_ulps_locked(struct dsim_device *dsim)
 
 	dsim_phy_power_on(dsim);
 
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, false);
 	dsim_reg_exit_ulps_and_start(dsim->id, 0, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 
 	dsim->state = DSIM_STATE_HSCLKEN;
 	enable_irq(dsim->irq);
@@ -291,10 +301,12 @@ static void _dsim_enable(struct dsim_device *dsim)
 		dsim_info(dsim, "dsim handover. skip_init=%d\n", skip_init);
 	}
 
+	mutex_lock(&g_dsim_lock);
 	if (!skip_init)
 		dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, true);
 
 	dsim_reg_start(dsim->id);
+	mutex_unlock(&g_dsim_lock);
 
 	/* TODO: dsi start: enable irq, sfr configuration */
 	dsim->state = DSIM_STATE_HSCLKEN;
@@ -377,7 +389,9 @@ static void _dsim_enter_ulps_locked(struct dsim_device *dsim)
 	mutex_unlock(&dsim->cmd_lock);
 
 	disable_irq(dsim->irq);
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_stop_and_enter_ulps(dsim->id, 0, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 
 	dsim_phy_power_off(dsim);
 
@@ -415,8 +429,10 @@ static void _dsim_disable(struct dsim_device *dsim)
 
 	/* Wait for current read & write CMDs. */
 	mutex_lock(&dsim->cmd_lock);
+	mutex_lock(&g_dsim_lock);
 	/* TODO: 0x1F will be changed */
 	dsim_reg_stop(dsim->id, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 	disable_irq(dsim->irq);
 
 	dsim->state = DSIM_STATE_SUSPEND;
@@ -805,11 +821,15 @@ getnode_fail:
 static void dsim_restart(struct dsim_device *dsim)
 {
 	mutex_lock(&dsim->cmd_lock);
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_stop(dsim->id, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 	disable_irq(dsim->irq);
 
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, true);
 	dsim_reg_start(dsim->id);
+	mutex_unlock(&g_dsim_lock);
 	enable_irq(dsim->irq);
 	mutex_unlock(&dsim->cmd_lock);
 }
@@ -2033,6 +2053,7 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 		is_last = true;
 	}
 
+	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, is_last);
 	dsim_debug(dsim, "%s last command\n", is_last ? "" : "Not");
 
 	if (is_last) {
@@ -2073,6 +2094,7 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	}
 
 err:
+	trace_dsi_cmd_fifo_status(dsim->total_pend_ph, dsim->total_pend_pl);
 	DPU_ATRACE_END(__func__);
 	return ret;
 }
@@ -2081,16 +2103,18 @@ static int
 dsim_req_read_command(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 {
 	struct mipi_dsi_packet packet;
+	const u8 rx_len = msg->rx_len & 0xff;
 
 	dsim_reg_clear_int(dsim->id, DSIM_INTSRC_SFR_PH_FIFO_EMPTY);
 	reinit_completion(&dsim->ph_wr_comp);
-
+	trace_dsi_tx(MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE, &rx_len, 1, true);
 	/* set the maximum packet size returned */
 	dsim_reg_wr_tx_header(dsim->id, MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE,
 			msg->rx_len, 0, false);
 
 	/* read request */
 	mipi_dsi_create_packet(&packet, msg);
+	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, true);
 	dsim_reg_wr_tx_header(dsim->id, packet.header[0], packet.header[1],
 						packet.header[2], true);
 
@@ -2103,6 +2127,7 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	u32 rx_fifo, rx_size = 0;
 	int i = 0, ret = 0;
 	u8 *rx_buf = msg->rx_buf;
+	const u8 *tx_buf = msg->tx_buf;
 
 	if (msg->rx_len > MAX_RX_FIFO) {
 		dsim_err(dsim, "invalid rx len(%lu) max(%d)\n", msg->rx_len,
@@ -2187,6 +2212,7 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 		} while (!dsim_reg_rx_fifo_is_empty(dsim->id) && --retry_cnt);
 	}
 
+	trace_dsi_rx(tx_buf[0], rx_buf, rx_size);
 	return rx_size;
 }
 

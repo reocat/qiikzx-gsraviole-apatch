@@ -484,6 +484,7 @@ struct exynos_panel_desc {
 	bool is_partial;
 	bool is_panel_idle_supported;
 	bool no_lhbm_rr_constraints;
+	bool mipi_sync_te_prediction;
 	const u32 lhbm_effective_delay_frames;
 	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
@@ -625,6 +626,8 @@ struct exynos_panel {
 	 * mean rr switch so it differs from last_mode_set_ts
 	 */
 	ktime_t last_rr_switch_ts;
+	/* Record the last come out lp mode timestamp */
+	ktime_t last_lp_exit_ts;
 	u32 last_rr;
 
 	struct {
