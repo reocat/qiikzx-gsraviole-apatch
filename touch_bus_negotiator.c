@@ -414,6 +414,11 @@ static int tbn_probe(struct platform_device *pdev)
 					__func__, tbn->ap2aoc_gpio, err);
 				goto failed;
 			}
+		} else {
+			dev_err(tbn->dev, "%s: invalid ap2aoc_gpio %d!\n",
+				__func__, tbn->ap2aoc_gpio);
+			err = -EPROBE_DEFER;
+			goto failed;
 		}
 
 		tbn->aoc2ap_gpio = of_get_named_gpio(np, "tbn,aoc2ap_gpio", 0);
@@ -441,6 +446,7 @@ static int tbn_probe(struct platform_device *pdev)
 		} else {
 			dev_err(tbn->dev, "%s: invalid aoc2ap_gpio %d!\n",
 				__func__, tbn->aoc2ap_gpio);
+			err = -EPROBE_DEFER;
 			goto failed;
 		}
 
@@ -479,6 +485,9 @@ static int tbn_probe(struct platform_device *pdev)
 	dev_info(tbn->dev, "bus negotiator initialized: %pK, mode: %d\n", tbn, tbn->mode);
 
 failed:
+	if (err)
+		devm_kfree(dev, tbn);
+
 	return err;
 }
 
