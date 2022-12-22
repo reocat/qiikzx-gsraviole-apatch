@@ -30,6 +30,7 @@ kernel_module(
         "**/*.h",
         "Kbuild",
     ]) + [
+        "//private/google-modules/aoc:headers",
         "//private/google-modules/soc/gs:gs_soc_headers",
         "//private/google-modules/display:headers",
         "//private/google-modules/display/include:headers",
