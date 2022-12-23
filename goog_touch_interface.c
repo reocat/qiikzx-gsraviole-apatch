@@ -1593,7 +1593,10 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 
 	/* Take unsupported cmd_type as debug logs for compatibility check. */
 	if (ret == -EOPNOTSUPP) {
-		GOOG_DBG("unsupported request cmd_type %#x!\n", cmd_type);
+		GOOG_DBG("Unsupported request cmd_type %#x!\n", cmd_type);
+		ret = 0;
+	} else if (ret == -ESRCH) {
+		GOOG_WARN("No handler for cmd_type %#x!\n", cmd_type);
 		ret = 0;
 	}
 
@@ -1941,10 +1944,12 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 	if (ret != 0)
 		GOOG_ERR("Failed to enable heatmap!\n");
 
-	gti->cmd.report_rate_cmd.setting = gti->report_rate_setting_next;
-	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_REPORT_RATE);
-	if (ret != 0)
-		GOOG_ERR("Failed to set report rate!\n");
+	if (gti->vrr_enabled) {
+		gti->cmd.report_rate_cmd.setting = gti->report_rate_setting_next;
+		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_REPORT_RATE);
+		if (ret != 0)
+			GOOG_ERR("Failed to set report rate!\n");
+	}
 }
 
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running)
