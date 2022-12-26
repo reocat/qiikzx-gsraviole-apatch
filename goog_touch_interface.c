@@ -301,7 +301,7 @@ static void goog_init_proc(struct goog_touch_interface *gti)
 		}
 	}
 
-	gti->proc_dir = proc_mkdir_data(dev_name(gti->dev), 0444, gti_proc_dir_root, gti);
+	gti->proc_dir = proc_mkdir_data(dev_name(gti->dev), 0555, gti_proc_dir_root, gti);
 	if (!gti->proc_dir) {
 		GOOG_ERR(gti, "proc_mkdir_data failed!\n");
 		return;
@@ -312,7 +312,7 @@ static void goog_init_proc(struct goog_touch_interface *gti)
 
 		if (gti_proc_show[type])
 			gti->proc_heatmap[type] = proc_create_single_data(
-				name, 0444, gti->proc_dir, gti_proc_show[type], gti);
+				name, 0555, gti->proc_dir, gti_proc_show[type], gti);
 		if (!gti->proc_heatmap[type])
 			GOOG_ERR(gti, "proc_create_single_data failed for %s!\n", name);
 	}
