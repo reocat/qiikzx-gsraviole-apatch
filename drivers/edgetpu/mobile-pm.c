@@ -64,6 +64,7 @@ static int mobile_pwr_state_init(struct device *dev)
 		ret = pm_runtime_get_sync(dev);
 		if (ret) {
 			pm_runtime_put_noidle(dev);
+			pm_runtime_disable(dev);
 			dev_err(dev, "pm_runtime_get_sync returned %d\n", ret);
 			return ret;
 		}
@@ -74,6 +75,7 @@ static int mobile_pwr_state_init(struct device *dev)
 		dev_err(dev, "error initializing tpu state: %d\n", ret);
 		if (curr_state > TPU_OFF)
 			pm_runtime_put_sync(dev);
+		pm_runtime_disable(dev);
 		return ret;
 	}
 
@@ -255,8 +257,6 @@ static int mobile_pwr_state_set_locked(struct edgetpu_mobile_platform_dev *etmde
 			dev_err(dev, "%s: pm_runtime_put_sync returned %d\n", __func__, ret);
 			return ret;
 		}
-		if (platform_pwr->block_down)
-			platform_pwr->block_down(etdev);
 	}
 
 	return ret;
@@ -432,7 +432,12 @@ static int mobile_power_up(struct edgetpu_pm *etpm)
 	struct edgetpu_dev *etdev = etpm->etdev;
 	struct edgetpu_mobile_platform_dev *etmdev = to_mobile_dev(etdev);
 	struct edgetpu_mobile_platform_pwr *platform_pwr = &etmdev->platform_pwr;
-	int ret = mobile_pwr_state_set(etpm->etdev, mobile_get_initial_pwr_state(etdev->dev));
+	int ret;
+
+	if (platform_pwr->is_block_down && !platform_pwr->is_block_down(etdev))
+		return -EAGAIN;
+
+	ret = mobile_pwr_state_set(etpm->etdev, mobile_get_initial_pwr_state(etdev->dev));
 
 	etdev_info(etpm->etdev, "Powering up\n");
 
@@ -600,6 +605,7 @@ static int mobile_pm_after_create(struct edgetpu_pm *etpm)
 	struct edgetpu_mobile_platform_dev *etmdev = to_mobile_dev(etdev);
 	struct device *dev = etdev->dev;
 	struct edgetpu_mobile_platform_pwr *platform_pwr = &etmdev->platform_pwr;
+	int curr_state;
 
 	ret = mobile_pwr_state_init(dev);
 	if (ret)
@@ -641,7 +647,19 @@ static int mobile_pm_after_create(struct edgetpu_pm *etpm)
 
 	if (platform_pwr->after_create)
 		ret = platform_pwr->after_create(etdev);
+	if (ret)
+		goto err_debugfs_remove;
 
+	return 0;
+
+err_debugfs_remove:
+	debugfs_remove_recursive(platform_pwr->debugfs_dir);
+	/* pm_runtime_{enable,get_sync} were called in mobile_pwr_state_init */
+
+	curr_state = exynos_acpm_get_rate(TPU_ACPM_DOMAIN, 0);
+	if (curr_state > TPU_OFF)
+		pm_runtime_put_sync(dev);
+	pm_runtime_disable(dev);
 	return ret;
 }
 
@@ -668,17 +686,17 @@ static struct edgetpu_pm_handlers mobile_pm_handlers = {
 	.power_down = mobile_power_down,
 };
 
-int mobile_pm_create(struct edgetpu_dev *etdev)
+int edgetpu_mobile_pm_create(struct edgetpu_dev *etdev)
 {
 	return edgetpu_pm_create(etdev, &mobile_pm_handlers);
 }
 
-void mobile_pm_destroy(struct edgetpu_dev *etdev)
+void edgetpu_mobile_pm_destroy(struct edgetpu_dev *etdev)
 {
 	edgetpu_pm_destroy(etdev);
 }
 
-void mobile_pm_set_pm_qos(struct edgetpu_dev *etdev, u32 pm_qos_val)
+void edgetpu_mobile_pm_set_pm_qos(struct edgetpu_dev *etdev, u32 pm_qos_val)
 {
 	struct edgetpu_mobile_platform_dev *etmdev = to_mobile_dev(etdev);
 	struct edgetpu_mobile_platform_pwr *platform_pwr = &etmdev->platform_pwr;
@@ -741,7 +759,7 @@ static void mobile_pm_deactivate_bts_scenario(struct edgetpu_dev *etdev)
 	mutex_unlock(&platform_pwr->scenario_lock);
 }
 
-void mobile_pm_set_bts(struct edgetpu_dev *etdev, u16 bts_val)
+void edgetpu_mobile_pm_set_bts(struct edgetpu_dev *etdev, u16 bts_val)
 {
 	etdev_dbg(etdev, "%s: bts request - val = %u\n", __func__, bts_val);
 
