@@ -4,7 +4,6 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 M ?= $(shell pwd)
 
 EXTRA_CFLAGS	+= -DDYNAMIC_DEBUG_MODULE
-EXTRA_SYMBOLS	+= $(OUT_DIR)/../private/google-modules/aoc/Module.symvers
 
 include $(KERNEL_SRC)/../private/google-modules/soc/gs/Makefile.include
 

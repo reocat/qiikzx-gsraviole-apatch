@@ -549,7 +549,6 @@ struct gti_pm {
  * @ignore_palm_update: Ignore fw_palm status updates made on offload state change.
  * @default_palm_enabled: the palm default setting.
  * @wakeup_before_force_active_enabled: waking up the screen to force active.
- * @lptw_triggered: LPTW is triggered or not.
  * @wakeup_before_force_active_delay: the ms delay after waking up screen to force active.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
@@ -618,7 +617,6 @@ struct goog_touch_interface {
 	bool ignore_palm_update;
 	bool default_palm_enabled;
 	bool wakeup_before_force_active_enabled;
-	bool lptw_triggered;
 	unsigned int wakeup_before_force_active_delay;
 	union {
 		u8 offload_id_byte[4];
@@ -711,8 +709,6 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		enum gti_fw_status status, struct gti_fw_status_data* data);
 void gti_debug_hc_dump(struct goog_touch_interface *gti);
 void gti_debug_input_dump(struct goog_touch_interface *gti);
-
-int goog_get_lptw_triggered(struct goog_touch_interface *gti);
 
 #endif // _GOOG_TOUCH_INTERFACE_
 
