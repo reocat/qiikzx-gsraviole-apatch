@@ -8,6 +8,8 @@
 #include <linux/module.h>
 #include <linux/input/mt.h>
 #include <linux/of.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <samsung/exynos_drm_connector.h>
 
 #include "goog_touch_interface.h"
@@ -21,8 +23,300 @@ static u8 gti_dev_num;
  * GTI/common: forward declarations, structures and functions.
  */
 static void goog_offload_set_running(struct goog_touch_interface *gti, bool running);
+static int goog_precheck_heatmap(struct goog_touch_interface *gti);
 static void goog_set_display_state(struct goog_touch_interface *gti,
 	enum gti_display_state_setting display_state);
+
+/*-----------------------------------------------------------------------------
+ * GTI/proc: forward declarations, structures and functions.
+ */
+static int goog_proc_ms_base_show(struct seq_file *m, void *v);
+static int goog_proc_ms_diff_show(struct seq_file *m, void *v);
+static int goog_proc_ms_raw_show(struct seq_file *m, void *v);
+static int goog_proc_ss_base_show(struct seq_file *m, void *v);
+static int goog_proc_ss_diff_show(struct seq_file *m, void *v);
+static int goog_proc_ss_raw_show(struct seq_file *m, void *v);
+static struct proc_dir_entry *gti_proc_dir_root;
+static char *gti_proc_name[GTI_PROC_NUM] = {
+	[GTI_PROC_MS_BASE] = "ms_base",
+	[GTI_PROC_MS_DIFF] = "ms_diff",
+	[GTI_PROC_MS_RAW] = "ms_raw",
+	[GTI_PROC_SS_BASE] = "ss_base",
+	[GTI_PROC_SS_DIFF] = "ss_diff",
+	[GTI_PROC_SS_RAW] = "ss_raw",
+};
+static int (*gti_proc_show[GTI_PROC_NUM]) (struct seq_file *, void *) = {
+	[GTI_PROC_MS_BASE] = goog_proc_ms_base_show,
+	[GTI_PROC_MS_DIFF] = goog_proc_ms_diff_show,
+	[GTI_PROC_MS_RAW] = goog_proc_ms_raw_show,
+	[GTI_PROC_SS_BASE] = goog_proc_ss_base_show,
+	[GTI_PROC_SS_DIFF] = goog_proc_ss_diff_show,
+	[GTI_PROC_SS_RAW] = goog_proc_ss_raw_show,
+};
+DEFINE_PROC_SHOW_ATTRIBUTE(goog_proc_ms_base);
+DEFINE_PROC_SHOW_ATTRIBUTE(goog_proc_ms_diff);
+DEFINE_PROC_SHOW_ATTRIBUTE(goog_proc_ms_raw);
+DEFINE_PROC_SHOW_ATTRIBUTE(goog_proc_ss_base);
+DEFINE_PROC_SHOW_ATTRIBUTE(goog_proc_ss_diff);
+DEFINE_PROC_SHOW_ATTRIBUTE(goog_proc_ss_raw);
+
+static void goog_proc_heatmap_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	struct gti_sensor_data_cmd *cmd = &gti->cmd.manual_sensor_data_cmd;
+	u16 tx = gti->offload.caps.tx_size;
+	u16 rx = gti->offload.caps.rx_size;
+	int x, y;
+
+	if (cmd->size == 0 || cmd->buffer == NULL) {
+		seq_puts(m, "result: N/A!\n");
+		GOOG_WARN(gti, "result: N/A!\n");
+		return;
+	}
+
+	switch (cmd->type) {
+	case GTI_SENSOR_DATA_TYPE_MS_BASELINE:
+	case GTI_SENSOR_DATA_TYPE_MS_DIFF:
+	case GTI_SENSOR_DATA_TYPE_MS_RAW:
+		if (cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
+			seq_puts(m, "result:\n");
+			for (y = 0; y < rx; y++) {
+				for (x = 0; x < tx; x++)
+					seq_printf(m,  "%5d,", ((s16 *)cmd->buffer)[y * tx + x]);
+				seq_puts(m, "\n");
+			}
+		} else {
+			seq_printf(m, "error: invalid buffer %p or size %d!\n",
+				cmd->buffer, cmd->size);
+			GOOG_WARN(gti, "error: invalid buffer %p or size %d!\n",
+				cmd->buffer, cmd->size);
+		}
+		break;
+
+	case GTI_SENSOR_DATA_TYPE_SS_BASELINE:
+	case GTI_SENSOR_DATA_TYPE_SS_DIFF:
+	case GTI_SENSOR_DATA_TYPE_SS_RAW:
+		if (cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
+			seq_puts(m, "result:\n");
+			seq_puts(m, "TX:");
+			for (x = 0; x < tx; x++)
+				seq_printf(m, "%5d,", ((s16 *)cmd->buffer)[x]);
+			seq_puts(m, "\nRX:");
+			for (y = 0; y < rx; y++)
+				seq_printf(m, "%5d,", ((s16 *)cmd->buffer)[tx + y]);
+			seq_puts(m, "\n");
+		} else {
+			seq_printf(m, "error: invalid buffer %p or size %d!\n",
+				cmd->buffer, cmd->size);
+			GOOG_WARN(gti, "error: invalid buffer %p or size %d!\n",
+				cmd->buffer, cmd->size);
+		}
+		break;
+
+	default:
+		seq_printf(m, "error: invalid type %#x!\n", cmd->type);
+		GOOG_ERR(gti, "error: invalid type %#x!\n", cmd->type);
+		break;
+	}
+}
+
+static int goog_proc_heatmap_process(struct seq_file *m, void *v, enum gti_sensor_data_type type)
+{
+	struct goog_touch_interface *gti = m->private;
+	struct gti_sensor_data_cmd *cmd = &gti->cmd.manual_sensor_data_cmd;
+	int ret = 0;
+
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		seq_puts(m, "N/A!\n");
+		goto heatmap_process_err;
+	}
+
+	switch (type) {
+	case GTI_SENSOR_DATA_TYPE_MS_BASELINE:
+	case GTI_SENSOR_DATA_TYPE_MS_DIFF:
+	case GTI_SENSOR_DATA_TYPE_MS_RAW:
+	case GTI_SENSOR_DATA_TYPE_SS_BASELINE:
+	case GTI_SENSOR_DATA_TYPE_SS_DIFF:
+	case GTI_SENSOR_DATA_TYPE_SS_RAW:
+		cmd->type = type;
+		break;
+
+	default:
+		seq_printf(m, "error: invalid type %#x!\n", type);
+		GOOG_ERR(gti, "error: invalid type %#x!\n", type);
+		ret = -EINVAL;
+		break;
+	}
+
+	if (ret)
+		goto heatmap_process_err;
+
+	cmd->buffer = NULL;
+	cmd->size = 0;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA_MANUAL);
+	if (ret) {
+		seq_printf(m, "error: %d!\n", ret);
+		GOOG_ERR(gti, "error: %d!\n", ret);
+	} else {
+		GOOG_INFO(gti, "type %#x.\n", type);
+	}
+
+heatmap_process_err:
+	if (ret) {
+		cmd->buffer = NULL;
+		cmd->size = 0;
+	}
+	return ret;
+}
+
+static int goog_proc_ms_base_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
+	if (ret) {
+		seq_puts(m, "error: has been interrupted!\n");
+		GOOG_WARN(gti, "error: has been interrupted!\n");
+		return ret;
+	}
+
+	ret = goog_proc_heatmap_process(m, v, GTI_SENSOR_DATA_TYPE_MS_BASELINE);
+	if (!ret)
+		goog_proc_heatmap_show(m, v);
+	mutex_unlock(&gti->input_process_lock);
+
+	return ret;
+}
+
+static int goog_proc_ms_diff_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
+	if (ret) {
+		seq_puts(m, "error: has been interrupted!\n");
+		GOOG_WARN(gti, "error: has been interrupted!\n");
+		return ret;
+	}
+	ret = goog_proc_heatmap_process(m, v, GTI_SENSOR_DATA_TYPE_MS_DIFF);
+	if (!ret)
+		goog_proc_heatmap_show(m, v);
+	mutex_unlock(&gti->input_process_lock);
+
+	return ret;
+}
+
+static int goog_proc_ms_raw_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
+	if (ret) {
+		seq_puts(m, "error: has been interrupted!\n");
+		GOOG_WARN(gti, "error: has been interrupted!\n");
+		return ret;
+	}
+
+	ret = goog_proc_heatmap_process(m, v, GTI_SENSOR_DATA_TYPE_MS_RAW);
+	if (!ret)
+		goog_proc_heatmap_show(m, v);
+	mutex_unlock(&gti->input_process_lock);
+
+	return ret;
+}
+
+static int goog_proc_ss_base_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
+	if (ret) {
+		seq_puts(m, "error: has been interrupted!\n");
+		GOOG_WARN(gti, "error: has been interrupted!\n");
+		return ret;
+	}
+
+	ret = goog_proc_heatmap_process(m, v, GTI_SENSOR_DATA_TYPE_SS_BASELINE);
+	if (!ret)
+		goog_proc_heatmap_show(m, v);
+	mutex_unlock(&gti->input_process_lock);
+
+	return ret;
+}
+
+static int goog_proc_ss_diff_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
+	if (ret) {
+		seq_puts(m, "error: has been interrupted!\n");
+		GOOG_WARN(gti, "error: has been interrupted!\n");
+		return ret;
+	}
+
+	ret = goog_proc_heatmap_process(m, v, GTI_SENSOR_DATA_TYPE_SS_DIFF);
+	if (!ret)
+		goog_proc_heatmap_show(m, v);
+	mutex_unlock(&gti->input_process_lock);
+
+	return ret;
+}
+
+static int goog_proc_ss_raw_show(struct seq_file *m, void *v)
+{
+	struct goog_touch_interface *gti = m->private;
+	int ret;
+
+	ret = mutex_lock_interruptible(&gti->input_process_lock);
+	if (ret) {
+		seq_puts(m, "error: has been interrupted!\n");
+		GOOG_WARN(gti, "error: has been interrupted!\n");
+		return ret;
+	}
+
+	ret = goog_proc_heatmap_process(m, v, GTI_SENSOR_DATA_TYPE_SS_RAW);
+	if (!ret)
+		goog_proc_heatmap_show(m, v);
+	mutex_unlock(&gti->input_process_lock);
+
+	return ret;
+}
+
+static void goog_init_proc(struct goog_touch_interface *gti)
+{
+	int type;
+
+	if (!gti_proc_dir_root) {
+		gti_proc_dir_root = proc_mkdir(GTI_NAME, NULL);
+		if (!gti_proc_dir_root) {
+			pr_err("%s: proc_mkdir failed for %s!\n", __func__, GTI_NAME);
+			return;
+		}
+	}
+
+	gti->proc_dir = proc_mkdir_data(dev_name(gti->dev), 0555, gti_proc_dir_root, gti);
+	if (!gti->proc_dir) {
+		GOOG_ERR(gti, "proc_mkdir_data failed!\n");
+		return;
+	}
+
+	for (type = GTI_PROC_MS_BASE; type < GTI_PROC_NUM; type++) {
+		char *name = gti_proc_name[type];
+
+		if (gti_proc_show[type])
+			gti->proc_heatmap[type] = proc_create_single_data(
+				name, 0555, gti->proc_dir, gti_proc_show[type], gti);
+		if (!gti->proc_heatmap[type])
+			GOOG_ERR(gti, "proc_create_single_data failed for %s!\n", name);
+	}
+}
 
 /*-----------------------------------------------------------------------------
  * GTI/sysfs: forward declarations, structures and functions.
@@ -146,6 +440,11 @@ static ssize_t force_active_show(
 	ssize_t buf_idx = 0;
 	bool locked = false;
 
+	if (gti->ignore_force_active) {
+		GOOG_WARN(gti, "operation not supported!\n");
+		return -EOPNOTSUPP;
+	}
+
 	locked = goog_pm_wake_check_locked(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
 	buf_idx += scnprintf(buf, PAGE_SIZE - buf_idx, "result: %s\n",
 		locked ? "locked" : "unlocked");
@@ -177,20 +476,17 @@ static ssize_t force_active_store(struct device *dev,
 	}
 
 	if (locked) {
-		if (gti->wakeup_before_force_active_enabled) {
-			input_report_key(gti->vendor_input_dev, KEY_WAKEUP, true);
-			input_sync(gti->vendor_input_dev);
-			input_report_key(gti->vendor_input_dev, KEY_WAKEUP, false);
-			input_sync(gti->vendor_input_dev);
-			GOOG_INFO(gti, "KEY_WAKEUP triggered with %u ms delay.\n",
-				gti->wakeup_before_force_active_delay);
-			msleep(gti->wakeup_before_force_active_delay);
-		}
 		gti_debug_hc_dump(gti);
 		gti_debug_input_dump(gti);
-		ret = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE, false);
+		if (gti->ignore_force_active)
+			GOOG_WARN(gti, "operation not supported!\n");
+		else
+			ret = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE, false);
 	} else {
-		ret = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
+		if (gti->ignore_force_active)
+			GOOG_WARN(gti, "operation not supported!\n");
+		else
+			ret = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE);
 	}
 
 	if (ret < 0) {
@@ -428,6 +724,13 @@ static ssize_t ms_base_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: N/A!\n");
+		return buf_idx;
+	}
+
 	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
@@ -476,6 +779,13 @@ static ssize_t ms_diff_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: N/A!\n");
+		return buf_idx;
+	}
+
 	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
@@ -523,6 +833,13 @@ static ssize_t ms_raw_show(struct device *dev,
 	u16 tx = gti->offload.caps.tx_size;
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
+
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: N/A!\n");
+		return buf_idx;
+	}
 
 	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
@@ -823,6 +1140,13 @@ static ssize_t ss_base_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: N/A!\n");
+		return buf_idx;
+	}
+
 	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
@@ -875,6 +1199,13 @@ static ssize_t ss_diff_show(struct device *dev,
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
 
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: N/A!\n");
+		return buf_idx;
+	}
+
 	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
 		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
@@ -926,6 +1257,13 @@ static ssize_t ss_raw_show(struct device *dev,
 	u16 tx = gti->offload.caps.tx_size;
 	u16 rx = gti->offload.caps.rx_size;
 	int x, y;
+
+	ret = goog_precheck_heatmap(gti);
+	if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: N/A!\n");
+		return buf_idx;
+	}
 
 	ret = mutex_lock_interruptible(&gti->input_process_lock);
 	if (ret != 0) {
@@ -1388,6 +1726,33 @@ static void unregister_panel_bridge(struct drm_bridge *bridge)
 /*-----------------------------------------------------------------------------
  * GTI: functions.
  */
+static int goog_precheck_heatmap(struct goog_touch_interface *gti)
+{
+	int ret = 0;
+
+	if (gti->display_state == GTI_DISPLAY_STATE_OFF) {
+		/*
+		 * Ignore request on heatamp if project correlates closely with
+		 * display for touch scanning or I/O transaction.
+		 */
+		if (gti->ignore_screenoff_heatmap) {
+			GOOG_WARN(gti, "N/A for screen-off!\n");
+			ret = -ENODATA;
+		}
+
+		/*
+		 * Check the PM wakelock state for bus ownership before data
+		 * request.
+		 */
+		if (!goog_pm_wake_get_locks(gti)) {
+			GOOG_WARN(gti, "N/A during inactive bus!\n");
+			ret = -ENODATA;
+		}
+	}
+
+	return ret;
+}
+
 static void goog_set_display_state(struct goog_touch_interface *gti,
 	enum gti_display_state_setting display_state)
 {
@@ -2533,8 +2898,6 @@ void goog_init_input(struct goog_touch_interface *gti)
 		gti->debug_input[i].slot = i;
 
 	if (gti->vendor_dev && gti->vendor_input_dev) {
-		struct device_node *np = gti->vendor_dev->of_node;
-
 		/*
 		 * Initialize the ABS_MT_ORIENTATION to support orientation reporting.
 		 * Initialize the ABS_MT_TOUCH_MAJOR and ABS_MT_TOUCH_MINOR depending on
@@ -2575,25 +2938,21 @@ void goog_init_input(struct goog_touch_interface *gti)
 		 */
 		input_set_abs_params(gti->vendor_input_dev, ABS_MT_TOOL_TYPE,
 			MT_TOOL_FINGER, MT_TOOL_PALM, 0, 0);
-
-		/*
-		 * Initialize the EV_KEY capability.
-		 */
-		gti->wakeup_before_force_active_enabled =
-			of_property_read_bool(np, "goog,wakeup-before-force-active-enabled");
-		if (gti->wakeup_before_force_active_enabled) {
-			if (of_property_read_u32(np, "goog,wakeup-before-force-active-delay",
-					&gti->wakeup_before_force_active_delay)) {
-				gti->wakeup_before_force_active_delay = 50;
-			}
-			input_set_capability(gti->vendor_input_dev, EV_KEY, KEY_WAKEUP);
-		}
 	}
 }
 
 void goog_init_options(struct goog_touch_interface *gti,
 		struct gti_optional_configuration *options)
 {
+	/* Initialize the common features. */
+	if (gti->vendor_dev) {
+		struct device_node *np = gti->vendor_dev->of_node;
+
+		gti->ignore_force_active = of_property_read_bool(np, "goog,ignore-force-active");
+		gti->ignore_screenoff_heatmap =
+			of_property_read_bool(np, "goog,ignore-screenoff-heatmap");
+	}
+
 	/* Initialize default functions. */
 	gti->options.get_context_driver = goog_get_context_driver_nop;
 	gti->options.get_context_stylus = goog_get_context_stylus_nop;
@@ -3098,7 +3457,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 	}
 
 	if (!gti_class)
-		gti_class = class_create(THIS_MODULE, "goog_touch_interface");
+		gti_class = class_create(THIS_MODULE, GTI_NAME);
 
 	if (gti && gti_class) {
 		char *name = kasprintf(GFP_KERNEL, "gti.%d", gti_dev_num);
@@ -3132,9 +3491,10 @@ struct goog_touch_interface *goog_touch_interface_probe(
 	}
 
 	if (gti && gti->dev) {
+		goog_init_input(gti);
+		goog_init_proc(gti);
 		goog_init_options(gti, options);
 		goog_offload_probe(gti);
-		goog_init_input(gti);
 		goog_update_fw_settings(gti);
 		goog_register_tbn(gti);
 		goog_pm_probe(gti);
@@ -3168,6 +3528,8 @@ int goog_touch_interface_remove(struct goog_touch_interface *gti)
 	if (gti_class) {
 		unregister_chrdev_region(gti->dev_id, 1);
 		if (!gti_dev_num) {
+			proc_remove(gti_proc_dir_root);
+			gti_proc_dir_root = NULL;
 			class_destroy(gti_class);
 			gti_class = NULL;
 		}

@@ -18,6 +18,7 @@
 #include "touch_offload.h"
 #include "uapi/input/touch_offload.h"
 
+#define GTI_NAME "goog_touch_interface"
 #define GOOG_LOG_NAME(gti) ((gti && gti->dev) ? dev_name(gti->dev) : "GTI")
 #define GOOG_DBG(gti, fmt, args...)    pr_debug("[%s] %s: " fmt, GOOG_LOG_NAME(gti),\
 					__func__, ##args)
@@ -158,6 +159,16 @@ enum gti_pm_wakelock_type : u32 {
 	GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE = (1 << 4),
 	GTI_PM_WAKELOCK_TYPE_BUGREPORT = (1 << 5),
 	GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT = (1 << 6),
+};
+
+enum gti_proc_type : u32 {
+	GTI_PROC_MS_BASE,
+	GTI_PROC_MS_DIFF,
+	GTI_PROC_MS_RAW,
+	GTI_PROC_SS_BASE,
+	GTI_PROC_SS_DIFF,
+	GTI_PROC_SS_RAW,
+	GTI_PROC_NUM,
 };
 
 enum gti_reset_mode : u32 {
@@ -510,6 +521,8 @@ struct gti_pm {
  * @panel_bridge: struct that used to register panel bridge notification.
  * @connector: struct that used to get panel status.
  * @cmd: struct that used by vendor default handler.
+ * @proc_dir: struct that used for procfs.
+ * @proc_heatmap: struct that used for heatmap procfs.
  * @input_timestamp: input timestamp from touch vendor driver.
  * @mf_downtime: timestamp for motion filter control.
  * @display_vrefresh: display vrefresh in Hz.
@@ -528,8 +541,8 @@ struct gti_pm {
  * @default_grip_enabled: the grip default setting.
  * @ignore_palm_update: Ignore fw_palm status updates made on offload state change.
  * @default_palm_enabled: the palm default setting.
- * @wakeup_before_force_active_enabled: waking up the screen to force active.
- * @wakeup_before_force_active_delay: the ms delay after waking up screen to force active.
+ * @ignore_force_active: Ignore the force_active sysfs request.
+ * @ignore_screenoff_heatmap: Ignore the heatmap request during screen-off.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
@@ -565,6 +578,8 @@ struct goog_touch_interface {
 	struct drm_bridge panel_bridge;
 	struct drm_connector *connector;
 	struct gti_union_cmd_data cmd;
+	struct proc_dir_entry *proc_dir;
+	struct proc_dir_entry *proc_heatmap[GTI_PROC_NUM];
 	ktime_t input_timestamp;
 	ktime_t mf_downtime;
 
@@ -586,7 +601,8 @@ struct goog_touch_interface {
 	bool default_grip_enabled;
 	bool ignore_palm_update;
 	bool default_palm_enabled;
-	bool wakeup_before_force_active_enabled;
+	bool ignore_force_active;
+	bool ignore_screenoff_heatmap;
 	unsigned int wakeup_before_force_active_delay;
 	union {
 		u8 offload_id_byte[4];
