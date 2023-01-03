@@ -112,7 +112,7 @@ static int extract_dtbs(const char *in_filename, const char *out_dtb_filename,
 
   size_t buf_size;
   buf = load_file(in_filename, &buf_size);
-  if (!buf) {
+  if (!buf || fdt_check_full(buf, buf_size)) {
     fprintf(stderr, "Can not load file: %s\n", in_filename);
     goto end;
   }
