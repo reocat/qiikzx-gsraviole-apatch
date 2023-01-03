@@ -118,7 +118,13 @@ char *ufdt_node_get_fdt_prop_data(const struct ufdt_node *node, int *out_len) {
   }
   const struct fdt_property *prop = (struct fdt_property *)node->fdt_tag_ptr;
   if (out_len != NULL) {
-    *out_len = fdt32_to_cpu(prop->len);
+    uint32_t prop_len = fdt32_to_cpu(prop->len);
+
+    if (prop_len > INT_MAX) {
+      return NULL;
+    }
+
+    *out_len = prop_len;
   }
   return (char *)prop->data;
 }
