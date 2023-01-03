@@ -3,6 +3,7 @@
 ccflags-y	+= -I$(srctree)/$(src)/include
 ccflags-y	+= -I$(srctree)/../private/google-modules/display
 ccflags-y += -I$(srctree)/../private/google-modules/display/include/uapi
+ccflags-y += -I$(srctree)/../private/google-modules/aoc
 
 obj-$(CONFIG_TOUCHSCREEN_TBN)		+= touch_bus_negotiator.o
 obj-$(CONFIG_TOUCHSCREEN_HEATMAP)	+= heatmap.o

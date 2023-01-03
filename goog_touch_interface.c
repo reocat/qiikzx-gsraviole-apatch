@@ -2909,7 +2909,8 @@ static void goog_pm_resume(struct gti_pm *pm)
 	pm_stay_awake(gti->dev);
 
 	if (gti->tbn_register_mask) {
-		ret = tbn_request_bus(gti->tbn_register_mask);
+		gti->lptw_triggered = false;
+		ret = tbn_request_bus_with_result(gti->tbn_register_mask, &gti->lptw_triggered);
 		if (ret)
 			GOOG_ERR("tbn_request_bus failed, ret %d!\n", ret);
 	}
@@ -3181,6 +3182,15 @@ init_variable_report_rate_failed:
 
 	return 0;
 }
+
+int goog_get_lptw_triggered(struct goog_touch_interface *gti)
+{
+	if (gti == NULL)
+		return -ENODEV;
+
+	return gti->lptw_triggered;
+}
+EXPORT_SYMBOL(goog_get_lptw_triggered);
 
 static irqreturn_t gti_irq_handler(int irq, void *data)
 {
