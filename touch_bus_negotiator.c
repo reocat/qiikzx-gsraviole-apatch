@@ -341,6 +341,8 @@ int register_tbn(u32 *output)
 {
 	u32 i = 0;
 
+	*output = 0;
+
 	if (!tbn_context) {
 		pr_warn("%s: tbn_context doesn't exist.", __func__);
 		return 0;
@@ -402,7 +404,7 @@ static int tbn_probe(struct platform_device *pdev)
 
 	err = of_property_read_u32(np, "tbn,mode", &tbn->mode);
 	if (err)
-		tbn->mode = TBN_MODE_DISABLED;
+		tbn->mode = TBN_MODE_GPIO;
 
 	if (tbn->mode == TBN_MODE_GPIO) {
 		tbn->ap2aoc_gpio = of_get_named_gpio(np, "tbn,ap2aoc_gpio", 0);
@@ -485,8 +487,10 @@ static int tbn_probe(struct platform_device *pdev)
 	dev_info(tbn->dev, "bus negotiator initialized: %pK, mode: %d\n", tbn, tbn->mode);
 
 failed:
-	if (err)
+	if (err) {
 		devm_kfree(dev, tbn);
+		tbn_context = NULL;
+	}
 
 	return err;
 }
