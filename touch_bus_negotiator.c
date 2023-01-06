@@ -77,11 +77,16 @@ static int aoc_channel_kthread(void *data)
 	struct tbn_context *tbn = data;
 	struct TbnEventResponse resp;
 	ssize_t len;
+	bool service_ready = false;
 
 	while (!kthread_should_stop()) {
-		if (!aoc_tbn_service_ready()) {
-			dev_warn(tbn->dev, "%s: AOC TBN service is not ready.\n",
-				__func__);
+		if (service_ready != aoc_tbn_service_ready()) {
+			service_ready = !service_ready;
+			dev_info(tbn->dev, "%s: AOC TBN service is %s.\n",
+				__func__, service_ready ? "ready" : "not ready");
+		}
+
+		if (!service_ready) {
 			msleep(1000);
 			continue;
 		}
