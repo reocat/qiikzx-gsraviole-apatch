@@ -2135,7 +2135,8 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 	u16 rx = gti->offload.caps.rx_size;
 	struct gti_sensor_data_cmd *cmd = &gti->cmd.sensor_data_cmd;
 
-	scnprintf(trace_tag, sizeof(trace_tag), "%s: index=%llu\n", __func__, index);
+	scnprintf(trace_tag, sizeof(trace_tag), "%s: IDX=%llu IN_TS=%lld.\n",
+		__func__, index, gti->input_timestamp);
 	ATRACE_BEGIN(trace_tag);
 
 	frame->header.index = index++;
@@ -2278,8 +2279,15 @@ void goog_offload_input_report(void *handle,
 	int i;
 	int error;
 	unsigned long slot_bit_active = 0;
+	char trace_tag[128];
+	ktime_t ktime = ktime_get();
 
-	ATRACE_BEGIN(__func__);
+	scnprintf(trace_tag, sizeof(trace_tag),
+		"%s: IDX=%lld IN_TS=%lld TS=%lld DELTA=%lld ns.\n",
+		__func__, report->index,
+		ktime_to_ns(report->timestamp), ktime_to_ns(ktime),
+		ktime_to_ns(ktime_sub(ktime, report->timestamp)));
+	ATRACE_BEGIN(trace_tag);
 
 	goog_input_lock(gti);
 	input_set_timestamp(gti->vendor_input_dev, report->timestamp);
