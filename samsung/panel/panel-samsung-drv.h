@@ -431,6 +431,14 @@ struct exynos_panel_funcs {
 	 * Parse regulators for panel.
 	 */
 	int (*parse_regulators)(struct exynos_panel *ctx);
+
+	/**
+	 * @get_te_usec
+	 *
+	 * This callback is used to get current TE pulse time.
+	 */
+	unsigned int (*get_te_usec)(struct exynos_panel *exynos_panel,
+				    const struct exynos_panel_mode *pmode);
 };
 
 /**
