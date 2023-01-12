@@ -448,12 +448,14 @@ static int ufdt_local_fixup_prop(struct ufdt_node *target_prop_node,
   int len = 0;
   prop_offsets_ptr = ufdt_node_get_fdt_prop_data(local_fixup_prop_node, &len);
 
+  if (prop_offsets_ptr == NULL || len % sizeof(fdt32_t) != 0) return -1;
+
   char *prop_data;
   int target_length = 0;
 
   prop_data = ufdt_node_get_fdt_prop_data(target_prop_node, &target_length);
 
-  if (prop_offsets_ptr == NULL || prop_data == NULL) return -1;
+  if (prop_data == NULL) return -1;
 
   int i;
   for (i = 0; i < len; i += sizeof(fdt32_t)) {
