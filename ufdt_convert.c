@@ -350,10 +350,11 @@ static int _ufdt_output_property_to_fdt(
 
   int data_len = 0;
   void *data = ufdt_node_get_fdt_prop_data(&prop_node->parent, &data_len);
-  int aligned_data_len = (data_len + (FDT_TAGSIZE - 1)) & ~(FDT_TAGSIZE - 1);
+  unsigned int aligned_data_len =
+      ((unsigned int)data_len + (FDT_TAGSIZE - 1u)) & ~(FDT_TAGSIZE - 1u);
 
-  int new_propoff = fdt_size_dt_struct(fdtp);
-  int new_prop_size = sizeof(struct fdt_property) + aligned_data_len;
+  unsigned int new_propoff = fdt_size_dt_struct(fdtp);
+  unsigned int new_prop_size = sizeof(struct fdt_property) + aligned_data_len;
   struct fdt_property *new_prop =
       (struct fdt_property *)((char *)fdtp + fdt_off_dt_struct(fdtp) +
                               new_propoff);
