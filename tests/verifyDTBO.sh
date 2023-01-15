@@ -27,8 +27,12 @@ adb pull /sys/firmware/fdt final_dt > /dev/null
 mkdtimg_path="${ANDROID_HOST_BIN_LOCATION}/mkdtboimg"
 $mkdtimg_path dump dtbo.img -b dumped_dtbo > /dev/null
 
-#Get the index of the overlay applied from the kernel command line
-overlay_idx=$(adb shell cat /proc/cmdline | grep -o "androidboot.dtbo_idx=[^ ]*" | cut -d "=" -f 2)
+#Get the index of the overlay applied. Try bootconfig first, then cmdline.
+overlay_idx=$(adb shell cat /proc/bootconfig \
+    | grep 'androidboot.dtbo_idx = .*$' | cut -d "=" -f 2 | sed 's/[ \\\"]//g')
+if [[ ! $overlay_idx =~ [0-9]+ ]]; then
+  overlay_idx=$(adb shell cat /proc/cmdline | grep -o "androidboot.dtbo_idx=[^ ]*" | cut -d "=" -f 2)
+fi
 arg=""
 for idx in ${overlay_idx//,/ }
 do
