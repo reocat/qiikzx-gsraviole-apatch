@@ -233,11 +233,6 @@ enum gti_sensor_data_type : u32 {
 			TOUCH_SCAN_TYPE_SELF | TOUCH_DATA_TYPE_BASELINE,
 };
 
-enum gti_vendor_dev_pm_state : u32 {
-	GTI_VENDOR_DEV_RESUME = 0,
-	GTI_VENDOR_DEV_SUSPEND,
-};
-
 enum gti_fw_status : u32 {
 	GTI_FW_STATUS_RESET = 0,
 	GTI_FW_STATUS_PALM_ENTER,
@@ -260,8 +255,9 @@ enum gti_noise_mode_level : u8 {
  * Structures.
  */
 
-struct gti_context_driver_cmd {
-	struct {
+struct gti_context_changed {
+	union {
+		struct {
 		u32 screen_state : 1;
 		u32 display_refresh_rate : 1;
 		u32 touch_report_rate : 1;
@@ -270,7 +266,13 @@ struct gti_context_driver_cmd {
 		u32 charger_state : 1;
 		u32 hinge_angle : 1;
 		u32 offload_timestamp : 1;
-	} contents;
+		};
+		u32 value;
+	};
+};
+
+struct gti_context_driver_cmd {
+	struct gti_context_changed context_changed;
 
 	u8 screen_state;
 	u8 display_refresh_rate;
@@ -432,6 +434,7 @@ struct gti_union_cmd_data {
  */
 struct gti_fw_status_data {
 	enum gti_noise_mode_level noise_level;
+	u8 water_mode;
 };
 
 /**
@@ -555,6 +558,8 @@ struct gti_pm {
  * @tbn_register_mask: the tbn_mask that used to request/release touch bus.
  * @pm: struct that used by gti pm.
  * @pm_qos_req: struct that used by pm qos.
+ * @fw_status: firmware status such as water_mode, noise_level, etc.
+ * @context_changed: flags that indicate driver status changing.
  * @panel_is_lp_mode: display is in low power mode.
  * @offload_enable: touch offload is enabled or not.
  * @v4l2_enable: v4l2 is enabled or not.
@@ -625,6 +630,9 @@ struct goog_touch_interface {
 	u32 tbn_register_mask;
 	struct gti_pm pm;
 	struct pm_qos_request pm_qos_req;
+
+	struct gti_fw_status_data fw_status;
+	struct gti_context_changed context_changed;
 
 	bool panel_is_lp_mode;
 	bool offload_enabled;

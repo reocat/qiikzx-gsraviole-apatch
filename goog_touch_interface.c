@@ -1718,6 +1718,7 @@ static void panel_bridge_mode_set(struct drm_bridge *bridge,
 				vrefresh, gti->display_vrefresh);
 			gti->display_vrefresh = vrefresh;
 			gti->cmd.display_vrefresh_cmd.setting = vrefresh;
+			gti->context_changed.display_refresh_rate = 1;
 			ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_VREFRESH);
 			if (ret && ret != -EOPNOTSUPP)
 				GOOG_WARN(gti, "unexpected return(%d)!", ret);
@@ -2060,6 +2061,23 @@ void goog_v4l2_read(struct goog_touch_interface *gti, ktime_t timestamp)
 		heatmap_read(&gti->v4l2, ktime_to_ns(timestamp));
 }
 
+int goog_get_driver_status(struct goog_touch_interface *gti,
+		struct gti_context_driver_cmd *driver_cmd)
+{
+	driver_cmd->context_changed.value = gti->context_changed.value;
+	driver_cmd->screen_state = gti->pm.state;
+	driver_cmd->display_refresh_rate = gti->display_vrefresh;
+	driver_cmd->touch_report_rate = gti->report_rate_setting;
+	driver_cmd->noise_state = gti->fw_status.noise_level;
+	driver_cmd->water_mode = gti->fw_status.water_mode;
+	driver_cmd->offload_timestamp = ktime_get();
+
+	gti->context_changed.offload_timestamp = 1;
+
+	/* vendor driver overwrite the context */
+	return goog_process_vendor_cmd(gti, GTI_CMD_GET_CONTEXT_DRIVER);
+}
+
 void goog_offload_populate_coordinate_channel(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame, int channel)
 {
@@ -2139,18 +2157,26 @@ static void goog_offload_populate_driver_status_channel(
 	ds->header.channel_type = (u32)CONTEXT_CHANNEL_TYPE_DRIVER_STATUS;
 	ds->header.channel_size = sizeof(struct TouchOffloadDriverStatus);
 
-	ds->contents.screen_state = driver_cmd->contents.screen_state;
+	ds->contents.screen_state = driver_cmd->context_changed.screen_state;
 	ds->screen_state = driver_cmd->screen_state;
 
-	ds->contents.display_refresh_rate =
-			driver_cmd->contents.display_refresh_rate;
+	ds->contents.display_refresh_rate = driver_cmd->context_changed.display_refresh_rate;
 	ds->display_refresh_rate = driver_cmd->display_refresh_rate;
 
-	ds->contents.touch_report_rate = driver_cmd->contents.touch_report_rate;
+	ds->contents.touch_report_rate = driver_cmd->context_changed.touch_report_rate;
 	ds->touch_report_rate = driver_cmd->touch_report_rate;
 
-	ds->contents.offload_timestamp = driver_cmd->contents.offload_timestamp;
+	ds->contents.noise_state = driver_cmd->context_changed.noise_state;
+	ds->noise_state = driver_cmd->noise_state;
+
+	ds->contents.water_mode = driver_cmd->context_changed.water_mode;
+	ds->water_mode = driver_cmd->water_mode;
+
+	ds->contents.offload_timestamp = driver_cmd->context_changed.offload_timestamp;
 	ds->offload_timestamp = driver_cmd->offload_timestamp;
+
+	/* Clean up contents after updating the data. */
+	gti->context_changed.value = 0;
 }
 
 static void goog_offload_populate_stylus_status_channel(
@@ -2256,7 +2282,7 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		cmd->size = 0;
 		if (channel_type == CONTEXT_CHANNEL_TYPE_DRIVER_STATUS) {
 			ATRACE_BEGIN("populate driver context");
-			ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_CONTEXT_DRIVER);
+			ret = goog_get_driver_status(gti, &gti->cmd.context_driver_cmd);
 			if (ret == 0)
 				goog_offload_populate_driver_status_channel(
 						gti, frame, i,
@@ -3292,6 +3318,8 @@ static void goog_pm_suspend(struct gti_pm *pm)
 	if (pm->suspend)
 		pm->suspend(gti->vendor_dev);
 
+	gti->context_changed.screen_state = 1;
+
 	if (gti->tbn_register_mask) {
 		ret = tbn_release_bus(gti->tbn_register_mask);
 		if (ret)
@@ -3330,6 +3358,8 @@ static void goog_pm_resume(struct gti_pm *pm)
 
 	if (pm->resume)
 		pm->resume(gti->vendor_dev);
+
+	gti->context_changed.screen_state = 1;
 }
 
 void goog_pm_state_update_work(struct work_struct *work) {
@@ -3398,9 +3428,13 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		break;
 	case GTI_FW_STATUS_WATER_ENTER:
 		GOOG_INFO(gti, "Enter water mode\n");
+		gti->fw_status.water_mode = 1;
+		gti->context_changed.water_mode = 1;
 		break;
 	case GTI_FW_STATUS_WATER_EXIT:
 		GOOG_INFO(gti, "Exit water mode\n");
+		gti->fw_status.water_mode = 0;
+		gti->context_changed.water_mode = 1;
 		break;
 	case GTI_FW_STATUS_NOISE_MODE:
 		if (data == NULL) {
@@ -3408,9 +3442,12 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		} else {
 			if (data->noise_level == GTI_NOISE_MODE_EXIT) {
 				GOOG_INFO(gti, "Exit noise mode\n");
+				gti->fw_status.noise_level= 0;
 			} else {
 				GOOG_INFO(gti, "Enter noise mode, level: %d\n", data->noise_level);
+				gti->fw_status.noise_level = data->noise_level;
 			}
+			gti->context_changed.noise_state = 1;
 		}
 		break;
 	default:
@@ -3521,6 +3558,7 @@ static void goog_set_report_rate_work(struct work_struct *work)
 	}
 
 	gti->report_rate_setting = gti->report_rate_setting_next;
+	gti->context_changed.touch_report_rate = 1;
 }
 
 static int goog_init_variable_report_rate(struct goog_touch_interface *gti)
