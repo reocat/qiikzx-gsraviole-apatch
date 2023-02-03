@@ -160,6 +160,7 @@ enum gti_pm_wakelock_type : u32 {
 	GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE = (1 << 4),
 	GTI_PM_WAKELOCK_TYPE_BUGREPORT = (1 << 5),
 	GTI_PM_WAKELOCK_TYPE_OFFLOAD_REPORT = (1 << 6),
+	GTI_PM_WAKELOCK_TYPE_SENSOR_DATA = (1 << 7),
 };
 
 enum gti_proc_type : u32 {
@@ -697,7 +698,7 @@ inline int goog_request_threaded_irq(struct goog_touch_interface *gti,
 		unsigned long irqflags, const char *devname, void *dev_id);
 
 int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type cmd_type);
-int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq);
+int goog_input_process(struct goog_touch_interface *gti, bool reset_data);
 struct goog_touch_interface *goog_touch_interface_probe(
 		void *private_data,
 		struct device *dev,

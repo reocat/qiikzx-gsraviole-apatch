@@ -2178,8 +2178,52 @@ static void goog_offload_populate_stylus_status_channel(
 	ss->pen_active = stylus_cmd->pen_active;
 }
 
+static int goog_get_sensor_data(struct goog_touch_interface *gti,
+		struct gti_sensor_data_cmd *cmd, bool reset_data)
+{
+	int ret = 0;
+	int err = 0;
+	u16 tx = gti->offload.caps.tx_size;
+	u16 rx = gti->offload.caps.rx_size;
+
+	if (reset_data) {
+		if (cmd->type == GTI_SENSOR_DATA_TYPE_MS) {
+			cmd->size = TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx);
+		} else if (cmd->type == GTI_SENSOR_DATA_TYPE_SS) {
+			cmd->size = TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx);
+		} else {
+			ret = -EINVAL;
+			goto exit;
+		}
+
+		memset(gti->heatmap_buf, 0, cmd->size);
+		cmd->buffer = gti->heatmap_buf;
+		goto exit;
+	}
+
+	err = goog_pm_wake_lock(gti, GTI_PM_WAKELOCK_TYPE_SENSOR_DATA, true);
+	if (err < 0) {
+		GOOG_WARN(gti, "Failed to lock GTI_PM_WAKELOCK_TYPE_SENSOR_DATA: %d!\n", err);
+		ret = err;
+		goto exit;
+	}
+
+	err = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
+	if (err < 0) {
+		GOOG_WARN(gti, "Failed to get sensor data: %d!\n", err);
+		ret = err;
+	}
+
+	err = goog_pm_wake_unlock(gti, GTI_PM_WAKELOCK_TYPE_SENSOR_DATA);
+	if (err < 0)
+		GOOG_WARN(gti, "Failed to unlock GTI_PM_WAKELOCK_TYPE_SENSOR_DATA: %d!\n", err);
+
+exit:
+	return ret;
+}
+
 void goog_offload_populate_frame(struct goog_touch_interface *gti,
-		struct touch_offload_frame *frame, bool report_from_irq)
+		struct touch_offload_frame *frame, bool reset_data)
 {
 	static u64 index;
 	char trace_tag[128];
@@ -2233,14 +2277,8 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		} else if (channel_type & TOUCH_SCAN_TYPE_MUTUAL) {
 			ATRACE_BEGIN("populate mutual data");
 			cmd->type = GTI_SENSOR_DATA_TYPE_MS;
-			if (!report_from_irq) {
-				cmd->size = TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx);
-				memset(gti->heatmap_buf, 0, cmd->size);
-				cmd->buffer = gti->heatmap_buf;
-				ret = 0;
-			} else {
-				ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
-			}
+
+			ret = goog_get_sensor_data(gti, cmd, reset_data);
 			if (ret == 0 && cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx)) {
 				goog_offload_populate_mutual_channel(gti, frame, i,
@@ -2253,14 +2291,8 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		} else if (channel_type & TOUCH_SCAN_TYPE_SELF) {
 			ATRACE_BEGIN("populate self data");
 			cmd->type = GTI_SENSOR_DATA_TYPE_SS;
-			if (!report_from_irq) {
-				cmd->size = TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx);
-				memset(gti->heatmap_buf, 0, cmd->size);
-				cmd->buffer = gti->heatmap_buf;
-				ret = 0;
-			} else {
-				ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
-			}
+
+			ret = goog_get_sensor_data(gti, cmd, reset_data);
 			if (ret == 0 && cmd->buffer &&
 				cmd->size == TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx)) {
 				goog_offload_populate_self_channel(gti, frame, i,
@@ -2575,7 +2607,7 @@ bool goog_input_legacy_report(struct goog_touch_interface *gti)
 	return false;
 }
 
-int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq)
+int goog_input_process(struct goog_touch_interface *gti, bool reset_data)
 {
 	int ret = 0;
 	struct touch_offload_frame **frame = &gti->offload_frame;
@@ -2610,7 +2642,7 @@ int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq)
 			ret = -EBUSY;
 		} else {
 			goog_offload_set_running(gti, true);
-			goog_offload_populate_frame(gti, *frame, report_from_irq);
+			goog_offload_populate_frame(gti, *frame, reset_data);
 			ret = touch_offload_queue_frame(&gti->offload, *frame);
 			if (ret)
 				GOOG_ERR(gti, "failed to queue reserved frame(ret %d)!\n", ret);
@@ -2632,7 +2664,7 @@ int goog_input_process(struct goog_touch_interface *gti, bool report_from_irq)
 		cmd->buffer = NULL;
 		cmd->size = 0;
 		cmd->type = GTI_SENSOR_DATA_TYPE_MS;
-		ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_SENSOR_DATA);
+		ret = goog_get_sensor_data(gti, cmd, reset_data);
 		if (ret == 0 && cmd->buffer && cmd->size)
 			memcpy(gti->heatmap_buf, cmd->buffer, cmd->size);
 		goog_v4l2_read(gti, gti->input_timestamp);
@@ -2794,9 +2826,7 @@ void goog_input_release_all_fingers(struct goog_touch_interface *gti)
 
 	goog_input_unlock(gti);
 
-	mutex_lock(&gti->input_process_lock);
-	goog_input_process(gti, false);
-	mutex_unlock(&gti->input_process_lock);
+	goog_input_process(gti, true);
 }
 
 void goog_register_tbn(struct goog_touch_interface *gti)
@@ -3596,13 +3626,21 @@ static irqreturn_t gti_irq_thread_fn(int irq, void *data)
 
 	ATRACE_BEGIN(__func__);
 	cpu_latency_qos_update_request(&gti->pm_qos_req, 100 /* usec */);
+
+	/*
+	 * Some vendor drivers read sensor data inside vendor_irq_thread_fn.
+	 * We need to lock input_process_lock before vendor_irq_thread_fn to
+	 * avoid thread safe issue.
+	 */
+	mutex_lock(&gti->input_process_lock);
+
 	if (gti->vendor_irq_thread_fn)
 		ret = gti->vendor_irq_thread_fn(irq, gti->vendor_irq_cookie);
 	else
 		ret = IRQ_HANDLED;
 
-	mutex_lock(&gti->input_process_lock);
-	goog_input_process(gti, true);
+	goog_input_process(gti, false);
+
 	mutex_unlock(&gti->input_process_lock);
 
 	gti_debug_hc_update(gti, false);
