@@ -3396,6 +3396,12 @@ void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 	case GTI_FW_STATUS_GRIP_EXIT:
 		GOOG_INFO(gti, "Exit grip mode\n");
 		break;
+	case GTI_FW_STATUS_WATER_ENTER:
+		GOOG_INFO(gti, "Enter water mode\n");
+		break;
+	case GTI_FW_STATUS_WATER_EXIT:
+		GOOG_INFO(gti, "Exit water mode\n");
+		break;
 	case GTI_FW_STATUS_NOISE_MODE:
 		if (data == NULL) {
 			GOOG_INFO(gti, "Noise level is changed, level: unknown\n");
