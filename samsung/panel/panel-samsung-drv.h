@@ -107,6 +107,7 @@ enum exynos_panel_state {
 	PANEL_STATE_LP,
 	PANEL_STATE_MODESET,
 	PANEL_STATE_BLANK,
+	PANEL_STATE_COUNT,
 };
 
 /**
@@ -580,6 +581,8 @@ struct exynos_panel {
 	bool panel_need_handle_idle_exit;
 	/* indicates self refresh is active */
 	bool self_refresh_active;
+	/* indicates if panel brightness is set or not after reset */
+	bool is_brightness_initialized;
 	/**
 	 * refresh rate in panel idle mode
 	 * 0 means not in idle mode or not specified
