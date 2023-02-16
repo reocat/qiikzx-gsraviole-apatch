@@ -1413,24 +1413,13 @@ static int goog_precheck_heatmap(struct goog_touch_interface *gti)
 {
 	int ret = 0;
 
-	if (gti->display_state == GTI_DISPLAY_STATE_OFF) {
-		/*
-		 * Ignore request on heatamp if project correlates closely with
-		 * display for touch scanning or I/O transaction.
-		 */
-		if (gti->ignore_screenoff_heatmap) {
-			GOOG_WARN(gti, "N/A for screen-off!\n");
-			ret = -ENODATA;
-		}
-
-		/*
-		 * Check the PM wakelock state for bus ownership before data
-		 * request.
-		 */
-		if (!goog_pm_wake_get_locks(gti)) {
-			GOOG_WARN(gti, "N/A during inactive bus!\n");
-			ret = -ENODATA;
-		}
+	/*
+	 * Check the PM wakelock state and pm state for bus ownership before
+	 * data request.
+	 */
+	if (!goog_pm_wake_get_locks(gti) || gti->pm.state == GTI_PM_SUSPEND) {
+		GOOG_WARN(gti, "N/A during inactive bus!\n");
+		ret = -ENODATA;
 	}
 
 	return ret;
@@ -2718,8 +2707,6 @@ void goog_init_options(struct goog_touch_interface *gti,
 		struct device_node *np = gti->vendor_dev->of_node;
 
 		gti->ignore_force_active = of_property_read_bool(np, "goog,ignore-force-active");
-		gti->ignore_screenoff_heatmap =
-			of_property_read_bool(np, "goog,ignore-screenoff-heatmap");
 	}
 
 	/* Initialize default functions. */
@@ -2979,7 +2966,6 @@ static void goog_pm_resume(struct gti_pm *pm)
 		GOOG_WARN(gti, "GTI already resumed!\n");
 		return;
 	}
-	pm->state = GTI_PM_RESUME;
 
 	pm_stay_awake(gti->dev);
 
@@ -2994,6 +2980,7 @@ static void goog_pm_resume(struct gti_pm *pm)
 		pm->resume(gti->vendor_dev);
 
 	gti->context_changed.screen_state = 1;
+	pm->state = GTI_PM_RESUME;
 }
 
 void goog_pm_state_update_work(struct work_struct *work) {

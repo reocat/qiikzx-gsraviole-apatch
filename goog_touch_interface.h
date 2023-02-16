@@ -571,7 +571,6 @@ struct gti_pm {
  * @default_palm_enabled: the palm default setting.
  * @lptw_triggered: LPTW is triggered or not.
  * @ignore_force_active: Ignore the force_active sysfs request.
- * @ignore_screenoff_heatmap: Ignore the heatmap request during screen-off.
  * @offload_id: id that used by touch offload.
  * @heatmap_buf: heatmap buffer that used by v4l2.
  * @heatmap_buf_size: heatmap buffer size that used by v4l2.
@@ -645,7 +644,6 @@ struct goog_touch_interface {
 	bool default_palm_enabled;
 	bool lptw_triggered;
 	bool ignore_force_active;
-	bool ignore_screenoff_heatmap;
 	union {
 		u8 offload_id_byte[4];
 		u32 offload_id;
