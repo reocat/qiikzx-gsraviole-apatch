@@ -137,9 +137,7 @@ static const struct exynos_dsi_cmd s6e3hc4_sleepin_cmds[] = {
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_sleepin);
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
-	EXYNOS_DSI_CMD0(display_off),
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-
 	/* Fixed TE: sync on */
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0x51),
 	/* Set freq at 30 Hz */
@@ -163,7 +161,6 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_lp);
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_off_cmds[] = {
-	EXYNOS_DSI_CMD0(display_off),
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 	/* AOD low mode off */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
@@ -805,7 +802,6 @@ static void s6e3hc4_sleep(const struct exynos_panel *ctx, int frames)
 static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 				  const struct exynos_panel_mode *pmode)
 {
-	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
 	/* AOD low mode setting off */
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x52, 0x94);
@@ -816,12 +812,14 @@ static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	s6e3hc4_change_frequency(ctx, pmode);
 	s6e3hc4_sleep(ctx, 1);
-	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, display_on);
 
 	dev_info(ctx->dev, "exit LP mode\n");
 }
 
 static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
+	EXYNOS_DSI_CMD_SEQ_DELAY(10, MIPI_DCS_EXIT_SLEEP_MODE),
+
 	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xFE, 0x00),
@@ -830,28 +828,35 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	/* VREG 6.4V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x31, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x13, 0x13, 0x13, 0x13, 0x13),
+	/* Delete Toggle */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x58, 0x94),
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x0C, 0x60, 0x0C, 0x60),
 	/* VLIN1 7.9V */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x12, 0xB1),
 	EXYNOS_DSI_CMD_SEQ(0xB1, 0x08),
 	/* VGH 7.4V */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x0E, 0xF4),
 	EXYNOS_DSI_CMD_SEQ(0xF4, 0x18, 0x18, 0x18, 0x18, 0x18),
-	EXYNOS_DSI_CMD(nop, 120),
+	EXYNOS_DSI_CMD(lock_cmd_f0, 110),
 
 	/* Enable TE*/
 	EXYNOS_DSI_CMD_SEQ(0x35),
 
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 	/* Enable SP */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x00, 0x58, 0x69),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x69, 0x01),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0xB0, 0x02, 0xF3, 0x68),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0x68, 0x09, 0X09, 0X09, 0x0A, 0x0A, 0x0A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0x68, 0x09, 0X09, 0X09, 0x0A, 0x0A,
+			       0x0A),
 	/* FFC: 165 Mhz, 1% tolerance */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x36, 0xC5),
 	EXYNOS_DSI_CMD_SEQ(0xC5, 0x11, 0x10, 0x50, 0x05, 0x4E, 0x74),
 	/* NS transition flicker setting */
 	EXYNOS_DSI_CMD_SEQ(0xAB, 0x83),
-
 	/* TSP sync auto mode settings*/
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x3C, 0xB9),
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0x19, 0x09),
@@ -859,16 +864,14 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0x30, 0x03),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC8, 0xC0),
-
 	/* Set frame insertion count */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x10, 0xBD),
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x00),
-
 	EXYNOS_DSI_CMD0(freq_update),
 	/* VREG 6.8V */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x31, 0xF4),
 	EXYNOS_DSI_CMD_SEQ(0xF4, 0x17, 0x17, 0x17, 0x17, 0x17),
-	EXYNOS_DSI_CMD0(lock_cmd_f0),
+	EXYNOS_DSI_CMD(lock_cmd_f0, 17),
 
 	/* CASET */
 	EXYNOS_DSI_CMD_SEQ(0x2A, 0x00, 0x00, 0x05, 0x9F),
@@ -904,13 +907,6 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 	if (needs_reset) {
 		struct s6e3hc4_panel *spanel = to_spanel(ctx);
 
-		EXYNOS_DCS_BUF_ADD(ctx, MIPI_DCS_EXIT_SLEEP_MODE);
-		/* VREG 6.4V */
-		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x31, 0xF4);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xF4, 0x13, 0x13, 0x13, 0x13, 0x13);
-		EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
-		usleep_range(10000, 10010);
 		exynos_panel_send_cmd_set(ctx, &s6e3hc4_init_cmd_set);
 		spanel->is_pixel_off = false;
 	}
@@ -927,12 +923,10 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 	s6e3hc4_write_display_mode(ctx, mode); /* dimming and HBM */
 	s6e3hc4_change_frequency(ctx, pmode);
 
-	if (pmode->exynos_mode.is_lp_mode) {
+	if (pmode->exynos_mode.is_lp_mode)
 		exynos_panel_set_lp_mode(ctx, pmode);
-	} else if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK)) {
-		s6e3hc4_sleep(ctx, 1);
-		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
-	}
+	else if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK))
+		EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, display_on);
 
 	return 0;
 }
@@ -960,7 +954,7 @@ static int s6e3hc4_disable(struct drm_panel *panel)
 	spanel->hw_vrefresh = 60;
 	spanel->hw_idle_vrefresh = 0;
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, display_off);
 	/* VREG 6.4V */
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x31, 0xF4);
