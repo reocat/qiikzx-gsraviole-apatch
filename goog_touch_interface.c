@@ -332,6 +332,10 @@ static ssize_t force_active_show(
 	struct device *dev, struct device_attribute *attr, char *buf);
 static ssize_t force_active_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size);
+static ssize_t fw_coord_filter_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+static ssize_t fw_coord_filter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size);
 static ssize_t fw_grip_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 static ssize_t fw_grip_store(struct device *dev,
@@ -384,6 +388,7 @@ static ssize_t vrr_enabled_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size);
 
 static DEVICE_ATTR_RW(force_active);
+static DEVICE_ATTR_RW(fw_coord_filter);
 static DEVICE_ATTR_RW(fw_grip);
 static DEVICE_ATTR_RW(fw_palm);
 static DEVICE_ATTR_RO(fw_ver);
@@ -401,6 +406,7 @@ static DEVICE_ATTR_RW(vrr_enabled);
 
 static struct attribute *goog_attributes[] = {
 	&dev_attr_force_active.attr,
+	&dev_attr_fw_coord_filter.attr,
 	&dev_attr_fw_grip.attr,
 	&dev_attr_fw_palm.attr,
 	&dev_attr_fw_ver.attr,
@@ -482,6 +488,70 @@ static ssize_t force_active_store(struct device *dev,
 		GOOG_INFO(gti, "error: %d!\n", ret);
 		return ret;
 	}
+	return size;
+}
+
+static ssize_t fw_coord_filter_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	ssize_t buf_idx = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	struct gti_coord_filter_cmd *cmd = &gti->cmd.coord_filter_cmd;
+
+	if (!gti->coord_filter_enabled) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"error: not supported!\n");
+		GOOG_INFO(gti, "%s", buf);
+		return buf_idx;
+	}
+
+	cmd->setting = GTI_COORD_FILTER_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_GET_COORD_FILTER_ENABLED);
+	if (ret == -EOPNOTSUPP) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"error: not supported!\n");
+	} else if (ret) {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"error: %d!\n", ret);
+	} else {
+		buf_idx += scnprintf(buf + buf_idx, PAGE_SIZE - buf_idx,
+			"result: %u\n", cmd->setting | (gti->ignore_coord_filter_update << 1));
+	}
+	GOOG_INFO(gti, "%s", buf);
+
+	return buf_idx;
+}
+
+static ssize_t fw_coord_filter_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret = 0;
+	struct goog_touch_interface *gti = dev_get_drvdata(dev);
+	int fw_coord_filter;
+
+	if (kstrtou32(buf, 10, &fw_coord_filter)) {
+		GOOG_INFO(gti, "error: invalid input!\n");
+		return -EINVAL;
+	}
+
+	if (!gti->coord_filter_enabled) {
+		GOOG_INFO(gti, "error: not supported!\n");
+		return -EOPNOTSUPP;
+	}
+
+	gti->fw_coord_filter_enabled = fw_coord_filter & 0x01;
+	gti->ignore_coord_filter_update = (fw_coord_filter >> 1) & 0x01;
+	gti->cmd.coord_filter_cmd.setting = gti->fw_coord_filter_enabled ?
+			GTI_COORD_FILTER_ENABLE : GTI_COORD_FILTER_DISABLE;
+	ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_COORD_FILTER_ENABLED);
+	if (ret == -EOPNOTSUPP)
+		GOOG_INFO(gti, "error: not supported!\n");
+	else if (ret)
+		GOOG_INFO(gti, "error: %d!\n", ret);
+	else
+		GOOG_INFO(gti, "fw_coord_filter= %u\n", fw_coord_filter);
+
 	return size;
 }
 
@@ -1500,6 +1570,10 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 	case GTI_CMD_GET_CONTEXT_STYLUS:
 		ret = gti->options.get_context_stylus(private_data, &gti->cmd.context_stylus_cmd);
 		break;
+	case GTI_CMD_GET_COORD_FILTER_ENABLED:
+		ret = gti->options.get_coord_filter_enabled(private_data,
+				&gti->cmd.coord_filter_cmd);
+		break;
 	case GTI_CMD_GET_FW_VERSION:
 		ret = gti->options.get_fw_version(private_data, &gti->cmd.fw_version_cmd);
 		break;
@@ -1551,6 +1625,10 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 	case GTI_CMD_SET_CONTINUOUS_REPORT:
 		ret = gti->options.set_continuous_report(private_data,
 				&gti->cmd.continuous_report_cmd);
+		break;
+	case GTI_CMD_SET_COORD_FILTER_ENABLED:
+		ret = gti->options.set_coord_filter_enabled(private_data,
+				&gti->cmd.coord_filter_cmd);
 		break;
 	case GTI_CMD_SET_GRIP_MODE:
 		GOOG_INFO(gti, "Set firmware grip %s",
@@ -1975,6 +2053,8 @@ void goog_offload_populate_frame(struct goog_touch_interface *gti,
 void goog_update_fw_settings(struct goog_touch_interface *gti)
 {
 	int ret = 0;
+	bool enabled = false;
+
 	if(!gti->ignore_grip_update) {
 		if (gti->offload.offload_running && gti->offload.config.filter_grip)
 			gti->cmd.grip_cmd.setting = GTI_GRIP_DISABLE;
@@ -1991,6 +2071,23 @@ void goog_update_fw_settings(struct goog_touch_interface *gti)
 		else
 			gti->cmd.palm_cmd.setting = gti->default_palm_enabled;
 		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_PALM_MODE);
+		if (ret)
+			GOOG_WARN(gti, "unexpected return(%d)!", ret);
+	}
+
+	if (gti->coord_filter_enabled) {
+		if (!gti->ignore_coord_filter_update) {
+			if (gti->offload.offload_running && gti->offload.config.coord_filter)
+				enabled = false;
+			else
+				enabled = gti->default_coord_filter_enabled;
+		} else {
+			enabled = gti->fw_coord_filter_enabled;
+		}
+
+		gti->cmd.coord_filter_cmd.setting = enabled ?
+				GTI_COORD_FILTER_ENABLE : GTI_COORD_FILTER_DISABLE;
+		ret = goog_process_vendor_cmd(gti, GTI_CMD_SET_COORD_FILTER_ENABLED);
 		if (ret)
 			GOOG_WARN(gti, "unexpected return(%d)!", ret);
 	}
@@ -2192,6 +2289,8 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	gti->offload.caps.size_reporting = true;
 	gti->offload.caps.filter_grip = true;
 	gti->offload.caps.filter_palm = true;
+	gti->offload.caps.coord_filter = gti->coord_filter_enabled &&
+		of_property_read_bool(np, "goog,offload-caps-coord-filter");
 	gti->offload.caps.num_sensitivity_settings = 1;
 	gti->offload.caps.rotation_reporting = of_property_read_bool(np,
 		"goog,offload-caps-rotation-reporting");
@@ -2217,6 +2316,9 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 			"goog,default-grip-disabled") ? GTI_GRIP_DISABLE : GTI_GRIP_ENABLE;
 	gti->default_palm_enabled = of_property_read_bool(np,
 			"goog,default-palm-disabled") ? GTI_PALM_DISABLE : GTI_PALM_ENABLE;
+	gti->default_coord_filter_enabled = of_property_read_bool(np,
+			"goog,default-coord-filter-disabled") ?
+			GTI_COORD_FILTER_DISABLE : GTI_COORD_FILTER_ENABLE;
 
 	gti->heatmap_buf_size = gti->offload.caps.tx_size * gti->offload.caps.rx_size * sizeof(u16);
 	gti->heatmap_buf = devm_kzalloc(gti->vendor_dev, gti->heatmap_buf_size, GFP_KERNEL);
@@ -2519,6 +2621,12 @@ static int goog_get_context_stylus_nop(
 	return -ESRCH;
 }
 
+static int goog_get_coord_filter_enabled_nop(
+		void *private_data, struct gti_coord_filter_cmd *cmd)
+{
+	return -ESRCH;
+}
+
 static int goog_get_fw_version_nop(
 		void *private_data, struct gti_fw_version_cmd *cmd)
 {
@@ -2605,6 +2713,12 @@ static int goog_selftest_nop(
 
 static int goog_set_continuous_report_nop(
 		void *private_data, struct gti_continuous_report_cmd *cmd)
+{
+	return -ESRCH;
+}
+
+static int goog_set_coord_filter_enabled_nop(
+		void *private_data, struct gti_coord_filter_cmd *cmd)
 {
 	return -ESRCH;
 }
@@ -2717,15 +2831,21 @@ void goog_init_options(struct goog_touch_interface *gti,
 		struct gti_optional_configuration *options)
 {
 	/* Initialize the common features. */
+	gti->mf_mode = GTI_MF_MODE_DEFAULT;
+	gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
+	gti->display_state = GTI_DISPLAY_STATE_ON;
+
 	if (gti->vendor_dev) {
 		struct device_node *np = gti->vendor_dev->of_node;
 
 		gti->ignore_force_active = of_property_read_bool(np, "goog,ignore-force-active");
+		gti->coord_filter_enabled = of_property_read_bool(np, "goog,coord-filter-enabled");
 	}
 
 	/* Initialize default functions. */
 	gti->options.get_context_driver = goog_get_context_driver_nop;
 	gti->options.get_context_stylus = goog_get_context_stylus_nop;
+	gti->options.get_coord_filter_enabled = goog_get_coord_filter_enabled_nop;
 	gti->options.get_fw_version = goog_get_fw_version_nop;
 	gti->options.get_grip_mode = goog_get_grip_mode_nop;
 	gti->options.get_irq_mode = goog_get_irq_mode_nop;
@@ -2741,6 +2861,7 @@ void goog_init_options(struct goog_touch_interface *gti,
 	gti->options.reset = goog_reset_nop;
 	gti->options.selftest = goog_selftest_nop;
 	gti->options.set_continuous_report = goog_set_continuous_report_nop;
+	gti->options.set_coord_filter_enabled = goog_set_coord_filter_enabled_nop;
 	gti->options.set_grip_mode = goog_set_grip_mode_nop;
 	gti->options.set_heatmap_enabled = goog_set_heatmap_enabled_nop;
 	gti->options.set_irq_mode = goog_set_irq_mode_nop;
@@ -2756,6 +2877,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->options.get_context_driver = options->get_context_driver;
 		if (options->get_context_stylus)
 			gti->options.get_context_stylus = options->get_context_stylus;
+		if (options->get_coord_filter_enabled)
+			gti->options.get_coord_filter_enabled = options->get_coord_filter_enabled;
 		if (options->get_fw_version)
 			gti->options.get_fw_version = options->get_fw_version;
 		if (options->get_grip_mode)
@@ -2788,6 +2911,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->options.selftest = options->selftest;
 		if (options->set_continuous_report)
 			gti->options.set_continuous_report = options->set_continuous_report;
+		if (options->set_coord_filter_enabled)
+			gti->options.set_coord_filter_enabled = options->set_coord_filter_enabled;
 		if (options->set_grip_mode)
 			gti->options.set_grip_mode = options->set_grip_mode;
 		if (options->set_heatmap_enabled)
@@ -3399,9 +3524,6 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti->vendor_dev = dev;
 		gti->vendor_input_dev = input_dev;
 		gti->vendor_default_handler = default_handler;
-		gti->mf_mode = GTI_MF_MODE_DEFAULT;
-		gti->screen_protector_mode_setting = GTI_SCREEN_PROTECTOR_MODE_DISABLE;
-		gti->display_state = GTI_DISPLAY_STATE_ON;
 		mutex_init(&gti->input_lock);
 		mutex_init(&gti->input_process_lock);
 	}

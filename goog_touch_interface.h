@@ -49,6 +49,7 @@ enum gti_cmd_type : u32 {
 	GTI_CMD_GET_OPS_START = 0x200,
 	GTI_CMD_GET_CONTEXT_DRIVER,
 	GTI_CMD_GET_CONTEXT_STYLUS,
+	GTI_CMD_GET_COORD_FILTER_ENABLED,
 	GTI_CMD_GET_FW_VERSION,
 	GTI_CMD_GET_GRIP_MODE,
 	GTI_CMD_GET_IRQ_MODE,
@@ -67,6 +68,7 @@ enum gti_cmd_type : u32 {
 	/* GTI_CMD_SET operations. */
 	GTI_CMD_SET_OPS_START = 0x400,
 	GTI_CMD_SET_CONTINUOUS_REPORT,
+	GTI_CMD_SET_COORD_FILTER_ENABLED,
 	GTI_CMD_SET_GRIP_MODE,
 	GTI_CMD_SET_HEATMAP_ENABLED,
 	GTI_CMD_SET_IRQ_MODE,
@@ -81,6 +83,11 @@ enum gti_continuous_report_setting : u32 {
 	GTI_CONTINUOUS_REPORT_DISABLE = 0,
 	GTI_CONTINUOUS_REPORT_ENABLE,
 	GTI_CONTINUOUS_REPORT_DRIVER_DEFAULT,
+};
+
+enum gti_coord_filter_setting : u32 {
+	GTI_COORD_FILTER_DISABLE = 0,
+	GTI_COORD_FILTER_ENABLE,
 };
 
 enum gti_display_state_setting : u32 {
@@ -321,6 +328,10 @@ struct gti_debug_input {
 	struct gti_debug_coord released;
 };
 
+struct gti_coord_filter_cmd {
+	enum gti_coord_filter_setting setting;
+};
+
 struct gti_display_state_cmd {
 	enum gti_display_state_setting setting;
 };
@@ -389,6 +400,7 @@ struct gti_sensor_data_cmd {
  * @context_driver_cmd: command to update touch offload driver context.
  * @context_stylus_cmd: command to update touch offload stylus context.
  * @continuous_report_cmd: command to set continuous reporting.
+ * @coord_filter_cmd: command to set/get coordinate filter enabled.
  * @display_state_cmd: command to notify display state.
  * @display_vrefresh_cmd: command to notify display vertical refresh rate.
  * @fw_version_cmd: command to get fw version.
@@ -410,6 +422,7 @@ struct gti_union_cmd_data {
 	struct gti_context_driver_cmd context_driver_cmd;
 	struct gti_context_stylus_cmd context_stylus_cmd;
 	struct gti_continuous_report_cmd continuous_report_cmd;
+	struct gti_coord_filter_cmd coord_filter_cmd;
 	struct gti_display_state_cmd display_state_cmd;
 	struct gti_display_vrefresh_cmd display_vrefresh_cmd;
 	struct gti_fw_version_cmd fw_version_cmd;
@@ -441,6 +454,7 @@ struct gti_fw_status_data {
  * struct gti_optional_configuration - optional configuration by vendor driver.
  * @get_context_driver: vendor driver operation to update touch offload driver context.
  * @get_context_stylus: vendor driver operation to update touch offload stylus context.
+ * @get_coord_filter_enabled: vendor driver operation to get the coordinate filter enabled.
  * @get_fw_version: vendor driver operation to get fw version info.
  * @get_grip_mode: vendor driver operation to get the grip mode setting.
  * @get_irq_mode: vendor driver operation to get irq mode setting.
@@ -456,6 +470,7 @@ struct gti_fw_status_data {
  * @reset: vendor driver operation to exec reset.
  * @selftest: vendor driver operation to exec self-test.
  * @set_continuous_report: vendor driver operation to apply the continuous reporting setting.
+ * @set_coord_filter_enabled: vendor driver operation to apply the coordinate filter enabled.
  * @set_grip_mode: vendor driver operation to apply the grip setting.
  * @set_heatmap_enabled: vendor driver operation to apply the heatmap setting.
  * @set_irq_mode: vendor driver operation to apply the irq setting.
@@ -468,6 +483,7 @@ struct gti_fw_status_data {
 struct gti_optional_configuration {
 	int (*get_context_driver)(void *private_data, struct gti_context_driver_cmd *cmd);
 	int (*get_context_stylus)(void *private_data, struct gti_context_stylus_cmd *cmd);
+	int (*get_coord_filter_enabled)(void *private_data, struct gti_coord_filter_cmd *cmd);
 	int (*get_fw_version)(void *private_data, struct gti_fw_version_cmd *cmd);
 	int (*get_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
 	int (*get_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
@@ -484,6 +500,7 @@ struct gti_optional_configuration {
 	int (*reset)(void *private_data, struct gti_reset_cmd *cmd);
 	int (*selftest)(void *private_data, struct gti_selftest_cmd *cmd);
 	int (*set_continuous_report)(void *private_data, struct gti_continuous_report_cmd *cmd);
+	int (*set_coord_filter_enabled)(void *private_data, struct gti_coord_filter_cmd *cmd);
 	int (*set_grip_mode)(void *private_data, struct gti_grip_cmd *cmd);
 	int (*set_heatmap_enabled)(void *private_data, struct gti_heatmap_cmd *cmd);
 	int (*set_irq_mode)(void *private_data, struct gti_irq_cmd *cmd);
@@ -561,14 +578,18 @@ struct gti_pm {
  * @fw_status: firmware status such as water_mode, noise_level, etc.
  * @context_changed: flags that indicate driver status changing.
  * @panel_is_lp_mode: display is in low power mode.
- * @offload_enable: touch offload is enabled or not.
- * @v4l2_enable: v4l2 is enabled or not.
- * @tbn_enable: tbn is enabled or not.
+ * @offload_enabled: touch offload is enabled or not.
+ * @v4l2_enabled: v4l2 is enabled or not.
+ * @tbn_enabled: tbn is enabled or not.
+ * @coord_filter_enabled: coordinate filter is enabled or not.
  * @input_timestamp_changed: input timestamp changed from touch vendor driver.
  * @ignore_grip_update: Ignore fw_grip status updates made on offload state change.
  * @default_grip_enabled: the grip default setting.
  * @ignore_palm_update: Ignore fw_palm status updates made on offload state change.
  * @default_palm_enabled: the palm default setting.
+ * @ignore_coord_filter_update: Ignore fw_coordinate_filter status updates.
+ * @fw_coord_filter_enabled: the current setting of coordinate filter.
+ * @default_coord_filter_enabled: the default setting of coordinate filter.
  * @lptw_triggered: LPTW is triggered or not.
  * @ignore_force_active: Ignore the force_active sysfs request.
  * @offload_id: id that used by touch offload.
@@ -637,11 +658,15 @@ struct goog_touch_interface {
 	bool offload_enabled;
 	bool v4l2_enabled;
 	bool tbn_enabled;
+	bool coord_filter_enabled;
 	bool input_timestamp_changed;
 	bool ignore_grip_update;
 	bool default_grip_enabled;
 	bool ignore_palm_update;
 	bool default_palm_enabled;
+	bool ignore_coord_filter_update;
+	bool fw_coord_filter_enabled;
+	bool default_coord_filter_enabled;
 	bool lptw_triggered;
 	bool ignore_force_active;
 	union {
