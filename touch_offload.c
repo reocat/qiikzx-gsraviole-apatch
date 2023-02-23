@@ -502,7 +502,9 @@ static long touch_offload_ioctl(struct file *file, unsigned int ioctl_num,
 		    (configure.config.filter_palm &&
 		     !context->caps.filter_palm) ||
 		    (configure.config.auto_reporting &&
-		     !context->caps.auto_reporting)) {
+		     !context->caps.auto_reporting) ||
+		    (configure.config.coord_filter &&
+		     !context->caps.coord_filter)) {
 			pr_err("%s: Invalid configuration enables unsupported features!\n",
 			       __func__);
 			err = -EINVAL;
