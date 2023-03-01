@@ -1687,6 +1687,8 @@ void goog_v4l2_read(struct goog_touch_interface *gti, ktime_t timestamp)
 int goog_get_driver_status(struct goog_touch_interface *gti,
 		struct gti_context_driver_cmd *driver_cmd)
 {
+	gti->context_changed.offload_timestamp = 1;
+
 	driver_cmd->context_changed.value = gti->context_changed.value;
 	driver_cmd->screen_state = gti->pm.state;
 	driver_cmd->display_refresh_rate = gti->display_vrefresh;
@@ -1694,8 +1696,6 @@ int goog_get_driver_status(struct goog_touch_interface *gti,
 	driver_cmd->noise_state = gti->fw_status.noise_level;
 	driver_cmd->water_mode = gti->fw_status.water_mode;
 	driver_cmd->offload_timestamp = ktime_get();
-
-	gti->context_changed.offload_timestamp = 1;
 
 	/* vendor driver overwrite the context */
 	return goog_process_vendor_cmd(gti, GTI_CMD_GET_CONTEXT_DRIVER);
@@ -2010,6 +2010,9 @@ static void goog_offload_set_running(struct goog_touch_interface *gti, bool runn
 		GOOG_INFO(gti, "Set offload_running=%d, irq_index=%d, input_index=%d\n",
 			running, gti->irq_index, gti->input_index);
 
+		if (running)
+			gti->context_changed.value = U32_MAX;
+
 		gti->offload.offload_running = running;
 		goog_update_fw_settings(gti);
 	}
@@ -2263,10 +2266,10 @@ int goog_input_process(struct goog_touch_interface *gti, bool reset_data)
 
 	/*
 	 * Only do the input process if active slot(s) update
-	 * or slot(s) state change.
+	 * or slot(s) state change or driver context change.
 	 */
 	if (!(gti->slot_bit_active & gti->slot_bit_in_use) &&
-		!gti->slot_bit_changed)
+		!gti->slot_bit_changed && !gti->context_changed.value)
 		return -EPERM;
 
 	/*
@@ -2949,8 +2952,7 @@ static void goog_pm_suspend(struct gti_pm *pm)
 	gti_debug_hc_dump(gti);
 	gti_debug_input_dump(gti);
 
-	if (gti->slot_bit_active)
-		goog_input_release_all_fingers(gti);
+	goog_input_release_all_fingers(gti);
 
 	pm_relax(gti->dev);
 }
