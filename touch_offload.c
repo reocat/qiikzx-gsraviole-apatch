@@ -730,8 +730,6 @@ int touch_offload_cleanup(struct touch_offload_context *context)
 {
 	pr_debug("%s\n", __func__);
 
-	cdev_del(&context->dev);
-
 	device_destroy(context->cls, context->dev_num);
 
 	class_destroy(context->cls);
