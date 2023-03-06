@@ -1553,6 +1553,9 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 				&gti->cmd.continuous_report_cmd);
 		break;
 	case GTI_CMD_SET_GRIP_MODE:
+		GOOG_INFO(gti, "Set firmware grip %s",
+				gti->cmd.grip_cmd.setting == GTI_GRIP_ENABLE ?
+				"enabled" : "disabled");
 		ret = gti->options.set_grip_mode(private_data, &gti->cmd.grip_cmd);
 		break;
 	case GTI_CMD_SET_HEATMAP_ENABLED:
@@ -1562,15 +1565,23 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 		ret = gti->options.set_irq_mode(private_data, &gti->cmd.irq_cmd);
 		break;
 	case GTI_CMD_SET_PALM_MODE:
+		GOOG_INFO(gti, "Set firmware grip %s",
+				gti->cmd.palm_cmd.setting == GTI_PALM_ENABLE ?
+				"enabled" : "disabled");
 		ret = gti->options.set_palm_mode(private_data, &gti->cmd.palm_cmd);
 		break;
 	case GTI_CMD_SET_REPORT_RATE:
+		GOOG_INFO(gti, "Set touch report rate as %d Hz", gti->cmd.report_rate_cmd.setting);
 		ret = gti->options.set_report_rate(private_data, &gti->cmd.report_rate_cmd);
 		break;
 	case GTI_CMD_SET_SCAN_MODE:
 		ret = gti->options.set_scan_mode(private_data, &gti->cmd.scan_cmd);
 		break;
 	case GTI_CMD_SET_SCREEN_PROTECTOR_MODE:
+		GOOG_INFO(gti, "Set screen protector mode %s",
+				gti->cmd.screen_protector_mode_cmd.setting ==
+				GTI_SCREEN_PROTECTOR_MODE_ENABLE
+				? "enabled" : "disabled");
 		ret = gti->options.set_screen_protector_mode(private_data,
 				&gti->cmd.screen_protector_mode_cmd);
 		break;
@@ -3437,7 +3448,6 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		 * goog_init_input() needs the offload.cap initialization by goog_offload_probe().
 		 */
 		goog_init_input(gti);
-		goog_update_fw_settings(gti);
 		goog_register_tbn(gti);
 		goog_pm_probe(gti);
 		register_panel_bridge(gti);
