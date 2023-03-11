@@ -600,6 +600,8 @@ struct gti_pm {
  * @slot_bit_changed: bitmap of slot state changed for this input process cycle.
  * @slot_bit_active: bitmap of active slot during GTI lifecycle.
  * @dev_id: dev_t used for google interface driver.
+ * @charger_state: indicates a USB charger is connected.
+ * @charger_notifier: notifier for power_supply updates.
  * @irq_index: irq count that handle by GTI.
  * @input_index: the count of slot bit changed during goog_input_process().
  * @vendor_irq_handler: irq handler that register by vendor driver.
@@ -680,6 +682,9 @@ struct goog_touch_interface {
 	unsigned long slot_bit_changed;
 	unsigned long slot_bit_active;
 	dev_t dev_id;
+
+	u8 charger_state;
+	struct notifier_block charger_notifier;
 
 	u64 irq_index;
 	u64 input_index;

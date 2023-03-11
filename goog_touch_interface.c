@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/input/mt.h>
 #include <linux/of.h>
+#include <linux/power_supply.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <samsung/exynos_drm_connector.h>
@@ -1786,6 +1787,7 @@ int goog_get_driver_status(struct goog_touch_interface *gti,
 	driver_cmd->touch_report_rate = gti->report_rate_setting;
 	driver_cmd->noise_state = gti->fw_status.noise_level;
 	driver_cmd->water_mode = gti->fw_status.water_mode;
+	driver_cmd->charger_state = gti->charger_state;
 	driver_cmd->offload_timestamp = ktime_get();
 
 	/* vendor driver overwrite the context */
@@ -1885,6 +1887,9 @@ static void goog_offload_populate_driver_status_channel(
 
 	ds->contents.water_mode = driver_cmd->context_changed.water_mode;
 	ds->water_mode = driver_cmd->water_mode;
+
+	ds->contents.charger_state = driver_cmd->context_changed.charger_state;
+	ds->charger_state = driver_cmd->charger_state;
 
 	ds->contents.offload_timestamp = driver_cmd->context_changed.offload_timestamp;
 	ds->offload_timestamp = driver_cmd->offload_timestamp;
@@ -2203,6 +2208,38 @@ void goog_offload_input_report(void *handle,
 	ATRACE_END();
 }
 
+int gti_charger_state_change(struct notifier_block *nb, unsigned long action,
+			     void *data)
+{
+	struct goog_touch_interface *gti =
+		(struct goog_touch_interface *)container_of(nb,
+			struct goog_touch_interface, charger_notifier);
+	struct power_supply *psy = (struct power_supply *)data;
+	int ret;
+
+	/* Attempt actual status parsing */
+	if (psy && psy->desc->type == POWER_SUPPLY_TYPE_USB) {
+		union power_supply_propval present_val = { 0 };
+
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT,
+						&present_val);
+		if (ret < 0)
+			GOOG_ERR(gti,
+				 "Error while getting power supply property: %d!\n",
+				 ret);
+		else if ((u8)present_val.intval != gti->charger_state) {
+			/* Note: the expected values for present_val.intval are
+			 * 0 and 1. Cast to unsigned byte to ensure the
+			 * comparison is handled in the same variable data type.
+			 */
+			gti->context_changed.charger_state = 1;
+			gti->charger_state = (u8)present_val.intval;
+		}
+	}
+
+	return 0;
+}
+
 int goog_offload_probe(struct goog_touch_interface *gti)
 {
 	int ret;
@@ -2350,6 +2387,14 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	gti->v4l2_enabled = of_property_read_bool(np, "goog,v4l2-enabled");
 	GOOG_INFO(gti, "v4l2 W/H=(%lu, %lu), v4l2_enabled=%d.\n",
 		gti->v4l2.width, gti->v4l2.height, gti->v4l2_enabled);
+
+	/* Register for charger plugging status */
+	gti->charger_notifier.notifier_call = gti_charger_state_change;
+	ret = power_supply_reg_notifier(&gti->charger_notifier);
+	if (!ret) {
+		GOOG_ERR(gti, "Failed to register power_supply_reg_notifier!\n");
+		goto err_offload_probe;
+	}
 
 err_offload_probe:
 	return ret;
