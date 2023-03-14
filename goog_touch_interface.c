@@ -1523,6 +1523,8 @@ static void goog_set_display_state(struct goog_touch_interface *gti,
 			display_state);
 		return;
 	}
+
+	gti->context_changed.screen_state = 1;
 	gti->display_state = display_state;
 	gti->cmd.display_state_cmd.setting = display_state;
 	ret = goog_process_vendor_cmd(gti, GTI_CMD_NOTIFY_DISPLAY_STATE);
@@ -1643,7 +1645,7 @@ int goog_process_vendor_cmd(struct goog_touch_interface *gti, enum gti_cmd_type 
 		ret = gti->options.set_irq_mode(private_data, &gti->cmd.irq_cmd);
 		break;
 	case GTI_CMD_SET_PALM_MODE:
-		GOOG_INFO(gti, "Set firmware grip %s",
+		GOOG_INFO(gti, "Set firmware palm %s",
 				gti->cmd.palm_cmd.setting == GTI_PALM_ENABLE ?
 				"enabled" : "disabled");
 		ret = gti->options.set_palm_mode(private_data, &gti->cmd.palm_cmd);
@@ -1779,7 +1781,7 @@ int goog_get_driver_status(struct goog_touch_interface *gti,
 	gti->context_changed.offload_timestamp = 1;
 
 	driver_cmd->context_changed.value = gti->context_changed.value;
-	driver_cmd->screen_state = gti->pm.state;
+	driver_cmd->screen_state = gti->display_state;
 	driver_cmd->display_refresh_rate = gti->display_vrefresh;
 	driver_cmd->touch_report_rate = gti->report_rate_setting;
 	driver_cmd->noise_state = gti->fw_status.noise_level;
@@ -2379,10 +2381,10 @@ int goog_input_process(struct goog_touch_interface *gti, bool reset_data)
 
 	/*
 	 * Only do the input process if active slot(s) update
-	 * or slot(s) state change or driver context change.
+	 * or slot(s) state change or resetting frame data.
 	 */
 	if (!(gti->slot_bit_active & gti->slot_bit_in_use) &&
-		!gti->slot_bit_changed && !gti->context_changed.value)
+		!gti->slot_bit_changed && !reset_data)
 		return -EPERM;
 
 	/*
@@ -3078,8 +3080,6 @@ static void goog_pm_suspend(struct gti_pm *pm)
 	if (pm->suspend)
 		pm->suspend(gti->vendor_dev);
 
-	gti->context_changed.screen_state = 1;
-
 	if (gti->tbn_register_mask) {
 		ret = tbn_release_bus(gti->tbn_register_mask);
 		if (ret)
@@ -3117,7 +3117,6 @@ static void goog_pm_resume(struct gti_pm *pm)
 	if (pm->resume)
 		pm->resume(gti->vendor_dev);
 
-	gti->context_changed.screen_state = 1;
 	pm->state = GTI_PM_RESUME;
 }
 

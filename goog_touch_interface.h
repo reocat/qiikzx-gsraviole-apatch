@@ -151,8 +151,8 @@ enum gti_ping_mode : u32 {
 };
 
 enum gti_pm_state : u32 {
-	GTI_PM_RESUME = 0,
-	GTI_PM_SUSPEND,
+	GTI_PM_SUSPEND = 0,
+	GTI_PM_RESUME,
 };
 
 #define GTI_PM_WAKELOCK_TYPE_LOCK_MASK 0xFFFF
