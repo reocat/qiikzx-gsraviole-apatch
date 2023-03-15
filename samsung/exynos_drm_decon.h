@@ -393,7 +393,7 @@ struct dpu_log_decon_cfg {
 };
 
 struct dpu_log {
-	ktime_t time;
+	u64 ts_nsec;
 	enum dpu_event_type type;
 
 	union {
