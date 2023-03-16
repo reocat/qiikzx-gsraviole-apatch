@@ -1888,9 +1888,6 @@ static void goog_offload_populate_driver_status_channel(
 
 	ds->contents.offload_timestamp = driver_cmd->context_changed.offload_timestamp;
 	ds->offload_timestamp = driver_cmd->offload_timestamp;
-
-	/* Clean up contents after updating the data. */
-	gti->context_changed.value = 0;
 }
 
 static void goog_offload_populate_stylus_status_channel(
@@ -2119,9 +2116,6 @@ static void goog_offload_set_running(struct goog_touch_interface *gti, bool runn
 	if (gti->offload.offload_running != running) {
 		GOOG_INFO(gti, "Set offload_running=%d, irq_index=%d, input_index=%d\n",
 			running, gti->irq_index, gti->input_index);
-
-		if (running)
-			gti->context_changed.value = U32_MAX;
 
 		gti->offload.offload_running = running;
 		goog_update_fw_settings(gti);
