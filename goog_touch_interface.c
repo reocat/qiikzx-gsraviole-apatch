@@ -3570,7 +3570,15 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		gti_class = class_create(THIS_MODULE, GTI_NAME);
 
 	if (gti && gti_class) {
-		char *name = kasprintf(GFP_KERNEL, "gti.%d", gti_dev_num);
+		u32 dev_id = gti_dev_num;
+		char *name;
+
+		if (gti->vendor_dev) {
+			struct device_node *np = gti->vendor_dev->of_node;
+
+			of_property_read_u32(np, "goog,dev-id", &dev_id);
+		}
+		name = kasprintf(GFP_KERNEL, "gti.%d", dev_id);
 
 		if (name &&
 			!alloc_chrdev_region(&gti->dev_id, 0, 1, name)) {
