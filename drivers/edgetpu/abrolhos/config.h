@@ -34,6 +34,9 @@
  */
 #define EDGETPU_HAS_REMAPPED_DATA
 
+/* Metrics are reported for a single default "cluster" component. */
+#define EDGETPU_TPU_CLUSTER_COUNT	1
+
 /*
  * The TPU VA where the firmware is located.
  *
