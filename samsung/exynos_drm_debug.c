@@ -13,9 +13,9 @@
 #include <linux/kernel.h>
 #include <linux/console.h>
 #include <linux/debugfs.h>
-#include <linux/ktime.h>
 #include <linux/moduleparam.h>
 #include <linux/pm_runtime.h>
+#include <linux/sched/clock.h>
 #include <linux/sysfs.h>
 #include <linux/time.h>
 #include <video/mipi_display.h>
@@ -89,6 +89,31 @@ static void dpu_event_save_freqs(struct dpu_log_freqs *freqs)
 static void dpu_event_save_freqs(struct dpu_log_freqs *freqs) { }
 #endif
 
+static struct dpu_log *dpu_event_get_next(struct decon_device *decon)
+{
+	struct dpu_log *log;
+	unsigned long flags;
+	int idx;
+
+	if (!decon) {
+		pr_err("%s: invalid decon\n", __func__);
+		return NULL;
+	}
+
+	if (IS_ERR_OR_NULL(decon->d.event_log))
+		return NULL;
+
+	spin_lock_irqsave(&decon->d.event_lock, flags);
+	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
+	log = &decon->d.event_log[idx];
+	log->type = DPU_EVT_NONE;
+	spin_unlock_irqrestore(&decon->d.event_lock, flags);
+
+	log->ts_nsec = local_clock();
+
+	return log;
+}
+
 /* ===== EXTERN APIs ===== */
 
 /*
@@ -111,8 +136,6 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	const struct drm_format_info *fb_format;
 	struct exynos_partial *partial;
 	struct drm_rect *partial_region;
-	unsigned long flags;
-	int idx;
 	bool skip_excessive = true;
 
 	if (index < 0 || index >= MAX_DECON_CNT) {
@@ -164,13 +187,9 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	if (skip_excessive && dpu_event_ignore(type, decon))
 		return;
 
-	spin_lock_irqsave(&decon->d.event_lock, flags);
-	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
-	log = &decon->d.event_log[idx];
-	log->type = DPU_EVT_NONE;
-	spin_unlock_irqrestore(&decon->d.event_lock, flags);
-
-	log->time = ktime_get();
+	log = dpu_event_get_next(decon);
+	if (!log)
+		return;
 
 	switch (type) {
 	case DPU_EVT_DPP_FRAMEDONE:
@@ -264,6 +283,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		log->data.crtc_info.planes_changed = crtc_state->planes_changed;
 		log->data.crtc_info.mode_changed = crtc_state->mode_changed;
 		log->data.crtc_info.active_changed = crtc_state->active_changed;
+		log->data.crtc_info.connectors_changed = crtc_state->connectors_changed;
 		break;
 	case DPU_EVT_BTS_RELEASE_BW:
 	case DPU_EVT_BTS_UPDATE_BW:
@@ -329,8 +349,7 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 {
 	struct decon_device *decon;
 	struct dpu_log *log;
-	unsigned long flags;
-	int idx, i, dpp_ch;
+	int i, dpp_ch;
 
 	if (index < 0) {
 		DRM_ERROR("%s: decon id is not valid(%d)\n", __func__, index);
@@ -338,17 +357,9 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 	}
 
 	decon = get_decon_drvdata(index);
-
-	if (IS_ERR_OR_NULL(decon->d.event_log))
+	log = dpu_event_get_next(decon);
+	if (!log)
 		return;
-
-	spin_lock_irqsave(&decon->d.event_lock, flags);
-	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
-	log = &decon->d.event_log[idx];
-	log->type = DPU_EVT_NONE;
-	spin_unlock_irqrestore(&decon->d.event_lock, flags);
-
-	log->time = ktime_get();
 
 	decon->d.auto_refresh_frames = 0;
 
@@ -372,31 +383,6 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 }
 
 extern void *return_address(unsigned int);
-
-static struct dpu_log *dpu_event_get_next(struct decon_device *decon)
-{
-	struct dpu_log *log;
-	unsigned long flags;
-	int idx;
-
-	if (!decon) {
-		pr_err("%s: invalid decon\n", __func__);
-		return NULL;
-	}
-
-	if (IS_ERR_OR_NULL(decon->d.event_log))
-		return NULL;
-
-	spin_lock_irqsave(&decon->d.event_lock, flags);
-	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
-	log = &decon->d.event_log[idx];
-	log->type = DPU_EVT_NONE;
-	spin_unlock_irqrestore(&decon->d.event_lock, flags);
-
-	log->time = ktime_get();
-
-	return log;
-}
 
 /*
  * DPU_EVENT_LOG_CMD() - store DSIM command information
@@ -740,7 +726,8 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 	struct dpu_log dump_log;
 	struct dpu_log *log = &dump_log;
 	int latest = idx % dpu_event_log_max;
-	struct timespec64 ts;
+	unsigned long rem_nsec;
+	u64 ts;
 	const char *str_comp;
 	char buf[LOG_BUF_SIZE];
 	const struct dpu_fmt *fmt;
@@ -775,15 +762,14 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		if (is_skip_dpu_event_dump(log->type, condition))
 			continue;
 
-		/* TIME */
-		ts = ktime_to_timespec64(log->time);
-
 		/* If there is no timestamp, then exit directly */
-		if (!ts.tv_sec)
+		ts = log->ts_nsec;
+		if (!ts)
 			break;
 
-		len = scnprintf(buf, sizeof(buf), "[%6lld.%06ld] %20s", ts.tv_sec,
-				ts.tv_nsec / NSEC_PER_USEC, get_event_name(log->type));
+		rem_nsec = do_div(ts, 1000000000);
+		len = scnprintf(buf, sizeof(buf), "[%6llu.%06lu] %20s",
+				ts, rem_nsec / 1000, get_event_name(log->type));
 
 		switch (log->type) {
 		case DPU_EVT_DECON_RSC_OCCUPANCY:
@@ -873,13 +859,14 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_REQ_CRTC_INFO_OLD:
 		case DPU_EVT_REQ_CRTC_INFO_NEW:
 			scnprintf(buf + len, sizeof(buf) - len,
-				"\tenable(%d) active(%d) sr(%d) [p:%d m:%d a:%d]",
+				"\tenable(%d) active(%d) sr(%d) [p:%d m:%d a:%d c:%d]",
 					log->data.crtc_info.enable,
 					log->data.crtc_info.active,
 					log->data.crtc_info.self_refresh,
 					log->data.crtc_info.planes_changed,
 					log->data.crtc_info.mode_changed,
-					log->data.crtc_info.active_changed);
+					log->data.crtc_info.active_changed,
+					log->data.crtc_info.connectors_changed);
 			break;
 		case DPU_EVT_BTS_RELEASE_BW:
 		case DPU_EVT_BTS_UPDATE_BW:

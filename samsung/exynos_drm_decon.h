@@ -335,6 +335,7 @@ struct dpu_log_crtc_info {
 	bool mode_changed;
 	bool active_changed;
 	bool self_refresh;
+	bool connectors_changed;
 };
 
 struct dpu_log_freqs {
@@ -395,7 +396,7 @@ struct dpu_log_decon_cfg {
 };
 
 struct dpu_log {
-	ktime_t time;
+	u64 ts_nsec;
 	enum dpu_event_type type;
 
 	union {
