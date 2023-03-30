@@ -959,6 +959,21 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x35),
 
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	/* AOD Vlout3 Settings */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x59, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x00),
+	/* AOD Vint = -5V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x21, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x32),
+	/* AOD Vaint = -7.3V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x69, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0xFC),
+	/* AOD Vgl = -8V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x17, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x1E),
+	/* AOD SAP settings */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x04, 0xF6),
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x5A),
 	/* Enable SP */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x00, 0x58, 0x69),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x69, 0x01),
