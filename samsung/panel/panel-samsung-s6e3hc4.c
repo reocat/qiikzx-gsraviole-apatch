@@ -959,6 +959,9 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x35),
 
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	/* AOD SAP settings */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x04, 0xF6),
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x5A),
 	/* Enable SP */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x00, 0x58, 0x69),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x69, 0x01),
@@ -1491,6 +1494,12 @@ static void s6e3hc4_panel_init(struct exynos_panel *ctx)
 {
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
 	struct s6e3hc4_panel *spanel = to_spanel(ctx);
+
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	/* AOD SAP settings */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x04, 0xF6);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xF6, 0x5A);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc4_init_cmd_set, "init");
 	debugfs_create_bool("force_changeable_te", 0644, ctx->debugfs_entry,
