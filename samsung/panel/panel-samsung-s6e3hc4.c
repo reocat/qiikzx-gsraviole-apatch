@@ -143,24 +143,35 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc4_sleepin);
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_low_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-	/* AOD low Mode, 10 nit */
+	/* 10 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x07, 0x98, 0x02),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 	EXYNOS_DSI_CMD0(min_dbv),
 };
 
+static const struct exynos_dsi_cmd s6e3hc4_lp_mid_cmds[] = {
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	/* 20 nit */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x05, 0xD8, 0x02),
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
+	EXYNOS_DSI_CMD0(min_dbv),
+};
+
 static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-	/* AOD high Mode, 50 nit */
+	/* 30 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
-	EXYNOS_DSI_CMD_SEQ(0x94, 0x00),
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x04, 0x1D, 0x02),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 	EXYNOS_DSI_CMD0(min_dbv),
 };
 
 static const struct exynos_binned_lp s6e3hc4_binned_lp[] = {
 	BINNED_LP_MODE_TIMING("low", 80, s6e3hc4_lp_low_cmds, S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			      S6E3HC4_TE2_FALLING_EDGE_OFFSET),
+	BINNED_LP_MODE_TIMING("mid", 1064, s6e3hc4_lp_mid_cmds, S6E3HC4_TE2_RISING_EDGE_OFFSET,
 			      S6E3HC4_TE2_FALLING_EDGE_OFFSET),
 	BINNED_LP_MODE_TIMING("high", 2047, s6e3hc4_lp_high_cmds, S6E3HC4_TE2_RISING_EDGE_OFFSET,
 			      S6E3HC4_TE2_FALLING_EDGE_OFFSET)
@@ -942,7 +953,6 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	/* Delete Toggle */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x58, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x0C, 0x60, 0x0C, 0x60),
-	EXYNOS_DSI_CMD0(sync_begin),
 	/* VLIN1 7.9V */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x12, 0xB1),
 	EXYNOS_DSI_CMD_SEQ(0xB1, 0x08),
@@ -952,7 +962,6 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	/* VREG 4.5V */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x31, 0xF4),
 	EXYNOS_DSI_CMD_SEQ(0xF4, 0x00, 0x00, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD0(sync_end),
 	EXYNOS_DSI_CMD(lock_cmd_f0, 110),
 
 	/* Enable TE*/
