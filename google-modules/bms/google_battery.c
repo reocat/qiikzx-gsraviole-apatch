@@ -5263,8 +5263,6 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 
 /* ------------------------------------------------------------------------- */
 
-#ifdef CONFIG_DEBUG_FS
-
 static ssize_t cycle_counts_store(struct device *dev,
 				  struct device_attribute *attr,
 				  const char *buf, size_t count)
@@ -5769,8 +5767,6 @@ static int debug_ravg_fops_write(void *data, u64 val)
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(debug_ravg_fops, NULL, debug_ravg_fops_write, "%llu\n");
-
-#endif
 
 /* ------------------------------------------------------------------------- */
 
