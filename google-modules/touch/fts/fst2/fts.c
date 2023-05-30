@@ -688,7 +688,7 @@ static void fts_suspend_work(struct work_struct *work)
 	fts_enable_interrupt();
 }
 
-struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
+static struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
 {
 	struct drm_connector *connector;
 	struct drm_connector_list_iter conn_iter;
