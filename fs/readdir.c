@@ -338,9 +338,14 @@ static bool should_block_name(const char *name, int namlen)
 		/* Block pixelstats from starting */
 		F("pixelstats-vendor.gs101.rc"),
 
+		/* Block twoshay from starting */
+		F("twoshay.rc"),
+
 		/* Block the audiometrics service from starting */
 		F("vendor.google.audiometricext@1.0-service-vendor.rc"),
 	}, vintfs[] = {
+		/* Block the IInputProcessor service VINTF */
+		F("manifest_input.processor-service.xml"),
 
 		/* Block the Pixel memtrack.xml service VINTF */
 		F("memtrack.xml"),
