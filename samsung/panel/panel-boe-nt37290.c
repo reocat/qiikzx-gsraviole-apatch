@@ -984,10 +984,15 @@ static int nt37290_enable(struct drm_panel *panel)
 	exynos_panel_send_cmd_set(ctx,
 				  is_fhd ? &nt37290_dsc_fhd_cmd_set : &nt37290_dsc_wqhd_cmd_set);
 
-	if (pmode->exynos_mode.is_lp_mode)
+	if (pmode->exynos_mode.is_lp_mode) {
 		nt37290_set_lp_mode(ctx, pmode);
-	else if (needs_reset || ctx->panel_state == PANEL_STATE_BLANK)
-		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	} else {
+		if (!needs_reset)
+			nt37290_change_frequency(ctx, pmode);
+
+		if (needs_reset || ctx->panel_state == PANEL_STATE_BLANK)
+			EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	}
 
 	DPU_ATRACE_END(__func__);
 
