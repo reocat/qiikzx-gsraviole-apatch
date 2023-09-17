@@ -1147,6 +1147,7 @@ int sec_ts_read_calibration_report(struct sec_ts_data *ts)
 	return ts->cali_report_status;
 }
 
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD) && IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
 #define PTFLIB_ENCODED_ENABLED_OFFSET_LSB	0xA0
 #define PTFLIB_ENCODED_ENABLED_OFFSET_MSB	0x00
 #define PTFLIB_ENCODED_ENABLED_TRUE		0x01
@@ -1320,6 +1321,7 @@ static int sec_ts_ptflib_grip_prescreen_timeout(struct sec_ts_data *ts,
 
 	return 0;
 }
+#endif
 
 #define PTFLIB_GRIP_PRESCREEN_FRAMES_OFFSET_LSB	0x9C
 #define PTFLIB_GRIP_PRESCREEN_FRAMES_OFFSET_MSB	0x00
@@ -1340,6 +1342,7 @@ static int sec_ts_ptflib_get_grip_prescreen_frames(struct sec_ts_data *ts) {
 	return le32_to_cpup((uint32_t *) r_data);
 }
 
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
 static int sec_ts_ptflib_decoder(struct sec_ts_data *ts, const u16 *in_array,
 				 const int in_array_size, u16 *out_array,
 				 const int out_array_max_size)
@@ -1384,6 +1387,7 @@ static int sec_ts_ptflib_decoder(struct sec_ts_data *ts, const u16 *in_array,
 
 	return out_array_size;
 }
+#endif
 
 static void sec_ts_reinit(struct sec_ts_data *ts)
 {
@@ -4467,6 +4471,7 @@ static void sec_ts_device_init(struct sec_ts_data *ts)
 		sec_ts_set_custom_library(ts);
 #endif
 }
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
 
 static int sec_ts_heatmap_init(struct sec_ts_data *ts)
 {
@@ -4479,7 +4484,6 @@ static int sec_ts_heatmap_init(struct sec_ts_data *ts)
 	}
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
 	/*
 	 * Heatmap_probe must be called before irq routine is registered,
 	 * because heatmap_read is called from the irq context.
@@ -4501,9 +4505,9 @@ static int sec_ts_heatmap_init(struct sec_ts_data *ts)
 		input_err(true, &ts->client->dev,
 			"%s: fail! ret %d\n", __func__, ret);
 	}
-#endif
 	return ret;
 }
+#endif
 
 #ifdef USE_CHARGER_WORK
 static struct notifier_block sec_ts_psy_nb;
@@ -4736,12 +4740,14 @@ static int sec_ts_probe(struct spi_device *client)
 		sec_ts_delay(70);
 	ts->power_status = SEC_TS_STATE_POWER_ON;
 	ts->external_factory = false;
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)	
 	ts->heatmap_init_done = false;
 	ts->mutual_strength_heatmap.timestamp = 0;
 	ts->mutual_strength_heatmap.size_x = 0;
 	ts->mutual_strength_heatmap.size_y = 0;
 	ts->mutual_strength_heatmap.data = NULL;
 	ts->v4l2_mutual_strength_updated = false;
+#endif
 
 	ret = sec_ts_wait_for_ready(ts, SEC_TS_ACK_BOOT_COMPLETE);
 	if (ret < 0) {
@@ -4807,14 +4813,14 @@ static int sec_ts_probe(struct spi_device *client)
 	/* init motion filter mode */
 	ts->use_default_mf = 0;
 	ts->mf_state = SEC_TS_MF_FILTERED;
-
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
 	/* init heatmap */
 	if (ts->is_fw_corrupted == false) {
 		ret = sec_ts_heatmap_init(ts);
 		if (ret)
 			goto err_irq;
 	}
-
+#endif
 	input_info(true, &ts->client->dev, "%s: request_irq = %d\n", __func__,
 			client->irq);
 
@@ -4823,7 +4829,11 @@ static int sec_ts_probe(struct spi_device *client)
 	if (ret < 0) {
 		input_err(true, &ts->client->dev,
 			"%s: Unable to request threaded irq\n", __func__);
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)			
 		goto err_heatmap;
+#else
+		goto err_irq;
+#endif		
 	}
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
@@ -4923,12 +4933,11 @@ static int sec_ts_probe(struct spi_device *client)
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
 	touch_offload_cleanup(&ts->offload);
 #endif
-
-err_heatmap:
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
+err_heatmap:
 	heatmap_remove(&ts->v4l2);
+#endif	
 err_irq:
-#endif
 	cpu_latency_qos_remove_request(&ts->pm_qos_req);
 	if (ts->plat_data->support_dex) {
 		input_unregister_device(ts->input_dev_pad);
@@ -5752,8 +5761,9 @@ static void sec_ts_suspend_work(struct work_struct *work)
 	}
 
 	reinit_completion(&ts->bus_resumed);
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
 	sec_ts_enable_fw_grip(ts, true);
-
+#endif
 	/* Stop T-IC */
 	sec_ts_fix_tmode(ts, TOUCH_SYSTEM_MODE_SLEEP, TOUCH_MODE_STATE_STOP);
 	ret = sec_ts_write(ts, SEC_TS_CMD_CLEAR_EVENT_STACK, NULL, 0);
