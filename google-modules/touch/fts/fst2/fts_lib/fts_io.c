@@ -62,7 +62,7 @@ struct i2c_client *get_client()
   *slave
   * @return client if it was previously set or NULL in all the other cases
   */
-struct spi_device *get_client()
+struct spi_device *get_client(void)
 {
 	if (client != NULL)
 		return (struct spi_device *)client;

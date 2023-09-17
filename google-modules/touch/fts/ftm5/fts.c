@@ -4102,7 +4102,7 @@ static bool read_heatmap_raw(struct v4l2_heatmap *v4l2)
 /* Update a state machine used to toggle control of the touch IC's motion
  * filter.
  */
-static int update_motion_filter(struct fts_ts_info *info,
+__maybe_unused static int update_motion_filter(struct fts_ts_info *info,
 				unsigned long touch_id)
 {
 	/* Motion filter timeout, in milliseconds */
