@@ -124,8 +124,8 @@ enum gbms_charger_modes {
 #define port_is_sink(cc1, cc2) \
 	(rp_def_detected(cc1, cc2) || rp_1a5_detected(cc1, cc2) || rp_3a_detected(cc1, cc2))
 
-#define LOG_LVL_DEBUG				1
-#define LOG_LVL_INFO				2
+#define LOG_LVL_DEBUG				0
+#define LOG_LVL_INFO				0
 
 /*
  * Set CURRENT_LOG_LEVEL to 0 in order to disable all logging activity, else set
