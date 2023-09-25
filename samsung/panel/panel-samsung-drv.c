@@ -3305,11 +3305,72 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_atomic_state *state = new_crtc_state->state;
+	const struct drm_display_mode *current_mode = &ctx->current_mode->mode;
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	int ret;
 
 	if (unlikely(!new_crtc_state))
 		return 0;
+
+	if (unlikely(!current_mode)) {
+		dev_warn(ctx->dev, "%s: failed to get current mode, skip mode check\n", __func__);
+	} else {
+		struct drm_display_mode *target_mode = &new_crtc_state->adjusted_mode;
+		int current_vrefresh = drm_mode_vrefresh(current_mode);
+		int target_vrefresh = drm_mode_vrefresh(target_mode);
+
+		if (current_mode->hdisplay != target_mode->hdisplay &&
+		    current_mode->vdisplay != target_mode->vdisplay) {
+			if (current_vrefresh != target_vrefresh) {
+				/*
+				 * While switching resolution and refresh rate (from high to low) in
+				 * the same commit, the frame transfer time will become longer due
+				 * to BTS update. In the case, frame done time may cross to the next
+				 * vsync, which will hit DDIC’s constraint and cause the noises.
+				 * Keep the current BTS (higher one) for a few frames to avoid the
+				 * problem.
+				 */
+				if (current_vrefresh > target_vrefresh) {
+					target_mode->clock =
+						target_mode->htotal * target_mode->vtotal *
+						current_vrefresh / 1000;
+					if (target_mode->clock != new_crtc_state->mode.clock) {
+						new_crtc_state->mode_changed = true;
+						dev_dbg(ctx->dev,
+							"%s: keep mode (%s) clock %dhz on rrs\n",
+							__func__, target_mode->name,
+							current_vrefresh);
+					}
+				}
+
+				ctx->mode_in_progress = MODE_RES_AND_RR_IN_PROGRESS;
+			} else {
+				ctx->mode_in_progress = MODE_RES_IN_PROGRESS;
+			}
+		} else {
+			if (ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS &&
+			    new_crtc_state->adjusted_mode.clock != new_crtc_state->mode.clock) {
+				new_crtc_state->mode_changed = true;
+				new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
+				dev_dbg(ctx->dev, "%s: restore mode (%s) clock after rrs\n",
+					__func__, new_crtc_state->mode.name);
+			}
+
+			if (current_vrefresh != target_vrefresh)
+				ctx->mode_in_progress = MODE_RR_IN_PROGRESS;
+			else
+				ctx->mode_in_progress = MODE_DONE;
+		}
+
+		if (current_mode->hdisplay != target_mode->hdisplay ||
+		    current_mode->vdisplay != target_mode->vdisplay ||
+		    current_vrefresh != target_vrefresh)
+			dev_dbg(ctx->dev,
+				"%s: current %dx%d@%d, target %dx%d@%d, type %d\n", __func__,
+				current_mode->hdisplay, current_mode->vdisplay, current_vrefresh,
+				target_mode->hdisplay, target_mode->vdisplay, target_vrefresh,
+				ctx->mode_in_progress);
+	}
 
 	if (funcs && funcs->atomic_check) {
 		ret = funcs->atomic_check(ctx, state);
@@ -3441,14 +3502,17 @@ void exynos_panel_wait_for_vsync_done(struct exynos_panel *ctx, u32 te_us, u32 p
 {
 	u32 delay_us;
 
+	DPU_ATRACE_BEGIN(__func__);
 	if (unlikely(exynos_panel_wait_for_vblank(ctx))) {
 		delay_us = period_us + 1000;
 		usleep_range(delay_us, delay_us + 10);
+		DPU_ATRACE_END(__func__);
 		return;
 	}
 
 	delay_us = exynos_panel_vsync_start_time_us(te_us, period_us);
 	usleep_range(delay_us, delay_us + 10);
+	DPU_ATRACE_END(__func__);
 }
 EXPORT_SYMBOL(exynos_panel_wait_for_vsync_done);
 
@@ -4200,6 +4264,9 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		if (ret)
 			dev_err(ctx->dev, "unable to create cabc_mode\n");
 	}
+
+	ctx->mode_in_progress = MODE_DONE;
+
 	exynos_panel_handoff(ctx);
 
 	ret = mipi_dsi_attach(dsi);
