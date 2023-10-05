@@ -40,6 +40,8 @@ struct ufdt *ufdt_construct(void *fdtp, struct ufdt_node_pool *pool) {
   res_ufdt->mem_size_fdtps = DEFAULT_MEM_SIZE_FDTPS;
   res_ufdt->num_used_fdtps = (fdtp != NULL ? 1 : 0);
   res_ufdt->root = NULL;
+  res_ufdt->phandle_table.data = NULL;
+  res_ufdt->phandle_table.len = 0;
 
   return res_ufdt;
 
@@ -350,6 +352,11 @@ static int _ufdt_output_property_to_fdt(
 
   int data_len = 0;
   void *data = ufdt_node_get_fdt_prop_data(&prop_node->parent, &data_len);
+  if (!data) {
+    dto_error("Failed to get property data.\n");
+    return -1;
+  }
+
   unsigned int aligned_data_len =
       ((unsigned int)data_len + (FDT_TAGSIZE - 1u)) & ~(FDT_TAGSIZE - 1u);
 
