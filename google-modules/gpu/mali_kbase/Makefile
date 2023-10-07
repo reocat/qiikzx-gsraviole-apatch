@@ -32,12 +32,12 @@ endif
 #
 
 # Debug Ftrace configuration options
-CONFIG_MALI_SYSTEM_TRACE=y
+CONFIG_MALI_SYSTEM_TRACE=n
 
 # Core kbase configuration options
 CONFIG_MALI_EXPERT=y
 CONFIG_MALI_MIDGARD_DVFS=y
-CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD = y
+CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD = n
 
 # Pixel integration specific configuration options
 CONFIG_MALI_PLATFORM_NAME="pixel"
