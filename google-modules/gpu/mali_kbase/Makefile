@@ -32,12 +32,12 @@ endif
 #
 
 # Debug Ftrace configuration options
-CONFIG_MALI_SYSTEM_TRACE=y
+CONFIG_MALI_SYSTEM_TRACE=n
 
 # Core kbase configuration options
 CONFIG_MALI_EXPERT=y
 CONFIG_MALI_MIDGARD_DVFS=y
-CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD = y
+CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD = n
 
 # Pixel integration specific configuration options
 CONFIG_MALI_PLATFORM_NAME="pixel"
@@ -58,7 +58,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     CONFIG_MALI_MIDGARD ?= m
     ifeq ($(CONFIG_MALI_MIDGARD),m)
         CONFIG_MALI_PLATFORM_NAME ?= "devicetree"
-        CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD ?= y
+        CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD ?= n
         CONFIG_MALI_GATOR_SUPPORT ?= n
         CONFIG_MALI_ARBITRATION ?= n
         CONFIG_MALI_PARTITION_MANAGER ?= n
