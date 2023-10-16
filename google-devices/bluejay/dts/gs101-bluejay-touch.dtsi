@@ -3,7 +3,7 @@
  * Copyright 2021 Google, LLC.
  */
 
-#include "google-base/gs101-fts-touch.dtsi"
+#include "gs101-fts-touch.dtsi"
 
 &spitouch {
 	spi-max-frequency = <10000000>;

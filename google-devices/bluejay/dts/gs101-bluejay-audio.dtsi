@@ -7,7 +7,7 @@
  *
 */
 
-#include "google-base/gs101-raviole-audio.dtsi"
+#include "gs101-raviole-audio.dtsi"
 
 &aoc {
 	aoc-board-cfg = "b3";
