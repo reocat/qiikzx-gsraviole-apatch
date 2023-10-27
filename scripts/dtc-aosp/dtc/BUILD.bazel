@@ -37,22 +37,8 @@ genrule(
 UTILS = [
     "util.c",
     "util.h",
-    ":version_gen_header",
+    "version_non_gen.h",
 ]
-
-genrule(
-    name = "version_gen_header",
-    outs = ["version_gen.h"],
-    srcs = [
-        "METADATA",
-        "METADATA_version.sed",
-        "version_gen.h.in",
-    ],
-    cmd = """
-      version="$$(sed -f $(location METADATA_version.sed) -n $(location METADATA))-Android-build"
-      sed s/@VCS_TAG@/$${version}/ $(location version_gen.h.in) > $@
-    """,
-)
 
 cc_binary(
     name = "dtc",
