@@ -1194,7 +1194,12 @@ void gti_debug_hc_dump(struct goog_touch_interface *gti)
 			last_fifo[i].input_index, last_fifo[i].slot_bit_active);
 	}
 }
+#else
+static inline
+void gti_debug_hc_update(struct goog_touch_interface *gti, bool from_top_half) { }
+#endif /* GTI_DEBUG_KFIFO_LEN */
 
+#ifdef GTI_DEBUG_KFIFO_LEN
 inline void gti_debug_input_push(struct goog_touch_interface *gti, int slot)
 {
 	struct gti_debug_input fifo;
@@ -1327,6 +1332,9 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
 		GOOG_INFO(gti, "slot #%d is active!\n", slot);
 	}
 }
+#else
+static inline
+void gti_debug_input_update(struct goog_touch_interface *gti) { }
 #endif /* GTI_DEBUG_KFIFO_LEN */
 
 /*-----------------------------------------------------------------------------
@@ -2832,16 +2840,18 @@ static int goog_set_sensing_mode_nop(
 
 void goog_init_input(struct goog_touch_interface *gti)
 {
+#ifdef GTI_DEBUG_KFIFO_LEN
 	int i;
+#endif
 
 	if (!gti)
 		return;
-
+#ifdef GTI_DEBUG_KFIFO_LEN
 	INIT_KFIFO(gti->debug_fifo_hc);
 	INIT_KFIFO(gti->debug_fifo_input);
 	for (i = 0 ; i < MAX_SLOTS ; i++)
 		gti->debug_input[i].slot = i;
-
+#endif
 	if (gti->vendor_dev && gti->vendor_input_dev) {
 		/*
 		 * Initialize the ABS_MT_ORIENTATION to support orientation reporting.
