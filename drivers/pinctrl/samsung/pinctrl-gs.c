@@ -173,7 +173,7 @@ static const struct samsung_pin_ctrl gs101_pin_ctrl[] __initconst = {
 		/* pin banks of gs101 pin-controller (GSACTRL) */
 		.pin_banks	= gs101_pin_gsactrl,
 		.nr_banks	= ARRAY_SIZE(gs101_pin_gsactrl),
-		.eint_gpio_init = exynos_eint_gpio_init,
+		.eint_wkup_init = exynos_eint_wkup_init,
 	}, {
 		/* pin banks of gs101 pin-controller (PERIC0) */
 		.pin_banks	= gs101_pin_peric0,
