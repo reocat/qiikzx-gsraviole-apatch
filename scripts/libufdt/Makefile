@@ -16,4 +16,4 @@ mkdtimg-objs += $(libfdt-objs)
 
 HOST_EXTRACFLAGS := -I$(srctree)/scripts/dtc-aosp/dtc/libfdt \
 		    -I$(srctree)/$(src)/sysdeps/include
-HOST_EXTRACFLAGS += -std=gnu99 -Wno-stringop-truncation
+HOST_EXTRACFLAGS += -std=gnu99
