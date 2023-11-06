@@ -383,68 +383,22 @@ static void s6e3fc3_p10_lhbm_gamma_write(struct exynos_panel *ctx)
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, test_key_off_f0);
 }
 
-static void s6e3fc3_p10_get_te2_setting(struct exynos_panel_te2_timing *timing,
-				    u8 *setting)
-{
-	u8 delay_low_byte, delay_high_byte;
-	u8 width_low_byte, width_high_byte;
-	u32 rising, falling;
-
-	if (!timing || !setting)
-		return;
-
-	rising = timing->rising_edge;
-	falling = timing->falling_edge;
-
-	delay_low_byte = rising & 0xFF;
-	delay_high_byte = (rising >> 8) & 0xF;
-	width_low_byte = (falling - rising) & 0xFF;
-	width_high_byte = ((falling - rising) >> 8) & 0xF;
-
-	setting[0] = (delay_high_byte << 4) | width_high_byte;
-	setting[1] = delay_low_byte;
-	setting[2] = width_low_byte;
-}
-
 static void s6e3fc3_p10_update_te2(struct exynos_panel *ctx)
 {
-	struct exynos_panel_te2_timing timing;
+	/* TE2 settings will not change after init. Still Need this to generate the sysfs node */
+	return;
+}
+
+static void s6e3fc3_p10_send_te2_cmds(struct exynos_panel *ctx)
+{
 	u8 setting[2][4] = {
 		{0xCB, 0x00, 0x00, 0x30}, // normal 60Hz
 		{0xCB, 0x00, 0x00, 0x30}, // normal 90Hz
 	};
 	u8 lp_setting[4] = {0xCB, 0x00, 0x00, 0x10}; // lp low/high
-	int ret, i;
 
 	if (!ctx)
 		return;
-
-	/* normal mode */
-	for (i = 0; i < 2; i++) {
-		timing.rising_edge = ctx->te2.mode_data[i].timing.rising_edge;
-		timing.falling_edge = ctx->te2.mode_data[i].timing.falling_edge;
-
-		s6e3fc3_p10_get_te2_setting(&timing, &setting[i][1]);
-
-		dev_dbg(ctx->dev, "TE2 updated normal %dHz: 0xcb 0x%x 0x%x 0x%x\n",
-			(i == 0) ? 60 : 90,
-			setting[i][1], setting[i][2], setting[i][3]);
-	}
-
-	/* LP mode */
-	if (ctx->current_mode->exynos_mode.is_lp_mode) {
-		ret = exynos_panel_get_current_mode_te2(ctx, &timing);
-		if (!ret)
-			s6e3fc3_p10_get_te2_setting(&timing, &lp_setting[1]);
-		else if (ret == -EAGAIN)
-			dev_dbg(ctx->dev,
-				"Panel is not ready, use default setting\n");
-		else
-			return;
-
-		dev_dbg(ctx->dev, "TE2 updated LP: 0xcb 0x%x 0x%x 0x%x\n",
-			lp_setting[1], lp_setting[2], lp_setting[3]);
-	}
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 	EXYNOS_DCS_BUF_ADD_SET(ctx, test_key_on_f0);
@@ -457,10 +411,10 @@ static void s6e3fc3_p10_update_te2(struct exynos_panel *ctx)
 	EXYNOS_DCS_BUF_ADD_SET(ctx, setting[0]); /* 60Hz control */
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x2F, 0xCB); /* global para */
 	EXYNOS_DCS_BUF_ADD_SET(ctx, setting[1]); /* 90Hz control */
-	if (ctx->current_mode->exynos_mode.is_lp_mode) {
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0xAF, 0xCB); /* global para */
-		EXYNOS_DCS_BUF_ADD_SET(ctx, lp_setting); /* HLPM mode */
-	}
+
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0xAF, 0xCB); /* global para */
+	EXYNOS_DCS_BUF_ADD_SET(ctx, lp_setting); /* HLPM mode */
+
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para */
 	/* must flush */
 	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xF2, 0xC4); /* global para 8 bit */
@@ -580,6 +534,7 @@ static int s6e3fc3_p10_enable(struct drm_panel *panel)
 		s6e3fc3_p10_evt1_send_irc_setting_cmds(ctx);
 
 	s6e3fc3_p10_change_frequency(ctx, drm_mode_vrefresh(mode));
+	s6e3fc3_p10_send_te2_cmds(ctx);
 
 	s6e3fc3_p10_lhbm_gamma_write(ctx);
 	s6e3fc3_p10_send_lhbm_location_cmds(ctx);
@@ -666,6 +621,7 @@ static void s6e3fc3_p10_panel_init(struct exynos_panel *ctx)
 					   &s6e3fc3_p10_init_cmd_set, "init");
 	s6e3fc3_p10_lhbm_gamma_read(ctx);
 	s6e3fc3_p10_lhbm_gamma_write(ctx);
+	s6e3fc3_p10_send_te2_cmds(ctx);
 }
 
 static int s6e3fc3_p10_read_id(struct exynos_panel *ctx)
