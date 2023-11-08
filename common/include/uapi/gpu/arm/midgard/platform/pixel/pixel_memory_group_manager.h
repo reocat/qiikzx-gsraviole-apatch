@@ -7,4 +7,8 @@
 #ifndef _UAPI_PIXEL_MEMORY_GROUP_MANAGER_H_
 #define _UAPI_PIXEL_MEMORY_GROUP_MANAGER_H_
 
+void pixel_mgm_slc_inc_refcount(struct memory_group_manager_device* mgm_dev);
+
+void pixel_mgm_slc_dec_refcount(struct memory_group_manager_device* mgm_dev);
+
 #endif /* _UAPI_PIXEL_MEMORY_GROUP_MANAGER_H_ */
