@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <video/mipi_display.h>
+#include "trace/dpu_trace.h"
 
 #include "panel-samsung-drv.h"
 
@@ -401,6 +402,7 @@ static void s6e3fc3_p10_send_te2_cmds(struct exynos_panel *ctx)
 		return;
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
+	DPU_ATRACE_BEGIN(__func__);
 	EXYNOS_DCS_BUF_ADD_SET(ctx, test_key_on_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x28, 0xF2); /* global para  */
 	/* must flush */
@@ -420,6 +422,7 @@ static void s6e3fc3_p10_send_te2_cmds(struct exynos_panel *ctx)
 	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xF2, 0xC4); /* global para 8 bit */
 	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update); /* LTPS update */
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, test_key_off_f0);
+	DPU_ATRACE_END(__func__);
 }
 
 static void s6e3fc3_p10_change_frequency(struct exynos_panel *ctx,
@@ -653,6 +656,51 @@ static int s6e3fc3_p10_panel_probe(struct mipi_dsi_device *dsi)
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
 
+static bool check_for_8_bit_10_bit_cmds(struct exynos_panel *ctx,
+	const struct mipi_dsi_msg *msg, const bool is_last)
+{
+	static bool has_8_bit = false;
+	static bool has_10_bit = false;
+	static bool global_para_bit_set = false;
+	const u8 *tx_buf = msg->tx_buf;
+
+	if (global_para_bit_set && msg->tx_len == 2 && tx_buf[0] == 0xF2 && tx_buf[1] == 0xCC) {
+		has_10_bit = true;
+		if (!is_last)
+			dev_warn(ctx->dev, "10 bit DDIC command is not flushed!\n");
+	} else if (global_para_bit_set && msg->tx_len == 2 && tx_buf[0] == 0xF2 && tx_buf[1] == 0xC4) {
+		has_8_bit = true;
+		if (!is_last)
+			dev_warn(ctx->dev, "8 bit DDIC command is not flushed!\n");
+	}
+
+	global_para_bit_set = (
+		(msg->tx_len == 3 && tx_buf[0] == 0xB0 && tx_buf[1] == 0x28 && tx_buf[2] == 0xF2) ||
+		(msg->tx_len == 4 && tx_buf[0] == 0xB0 && tx_buf[1] == 0x00 && tx_buf[2] == 0x28 &&
+			tx_buf[3] == 0xF2));
+
+	if (has_8_bit && has_10_bit) {
+		has_8_bit = false;
+		has_10_bit = false;
+		return true;
+	}
+	if (is_last) {
+		has_8_bit = false;
+		has_10_bit = false;
+	}
+
+	return false;
+}
+
+static void s6e3fc3_p10_on_queue_ddic_command(struct exynos_panel *ctx,
+	const struct mipi_dsi_msg *msg, const bool is_last)
+{
+	if (check_for_8_bit_10_bit_cmds(ctx, msg, is_last)) {
+		dev_warn(ctx->dev, "DSIM Contains both 8 and 10 bit DDIC commands in the same batch!\n");
+		dump_stack();
+	}
+}
+
 static const struct exynos_display_underrun_param underrun_param = {
 	.te_idle_us = 1000,
 	.te_var = 1,
@@ -793,6 +841,7 @@ static const struct exynos_panel_funcs s6e3fc3_p10_exynos_funcs = {
 	.update_te2 = s6e3fc3_p10_update_te2,
 	.set_op_hz = s6e3fc3_p10_set_op_hz,
 	.read_id = s6e3fc3_p10_read_id,
+	.on_queue_ddic_cmd = s6e3fc3_p10_on_queue_ddic_command,
 };
 
 const struct brightness_capability s6e3fc3_p10_brightness_capability = {
