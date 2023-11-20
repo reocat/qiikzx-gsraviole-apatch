@@ -510,14 +510,9 @@ static void kbase_csf_reset_gpu_worker(struct work_struct *data)
 
 	kbase_disjoint_state_down(kbdev);
 
-	if (err) {
-		evt.type = GPU_UEVENT_TYPE_GPU_RESET;
-		evt.info = GPU_UEVENT_INFO_CSF_RESET_FAILED;
-	} else {
-		evt.type = GPU_UEVENT_TYPE_GPU_RESET;
-		evt.info = GPU_UEVENT_INFO_CSF_RESET_OK;
-	}
-	if (!silent)
+	evt.type = GPU_UEVENT_TYPE_GPU_RESET;
+	evt.info = err ? GPU_UEVENT_INFO_CSF_RESET_FAILED : GPU_UEVENT_INFO_CSF_RESET_OK;
+	if (!silent || err)
 		pixel_gpu_uevent_send(kbdev, &evt);
 
 	/* Allow other threads to once again use the GPU */
