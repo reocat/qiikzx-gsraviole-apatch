@@ -51,6 +51,9 @@ struct slc_partition {
 
 	/** @lock: Lock protecting enable/disable ops on this partition */
 	spinlock_t lock;
+
+	/** @signal: Partition enable/disable signal from SLC governor */
+	u64 signal;
 };
 
 /**
@@ -68,6 +71,9 @@ struct slc_data {
 
 	/** @disable_work: Work item used to queue lazy SLC partition disable ops. */
 	struct delayed_work disable_work;
+
+	/** @signal: Partition enable/disable signal from SLC governor. */
+	char __iomem *signal;
 };
 
 int slc_init_data(struct slc_data *data, struct device* dev);
@@ -81,5 +87,7 @@ u64 slc_wipe_pbha(u64 pte);
 void slc_inc_refcount(struct slc_data *data);
 
 void slc_dec_refcount(struct slc_data *data);
+
+void slc_update_signal(struct slc_data *data, u64 signal);
 
 #endif /* _PIXEL_SLC_H_ */

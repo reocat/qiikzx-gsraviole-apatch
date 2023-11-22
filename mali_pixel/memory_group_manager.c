@@ -533,6 +533,14 @@ static vm_fault_t mgm_vmf_insert_pfn_prot(
 	return fault;
 }
 
+void pixel_mgm_slc_update_signal(struct memory_group_manager_device* mgm_dev, u64 signal)
+{
+	struct mgm_groups *const data = mgm_dev->data;
+
+	slc_update_signal(&data->slc_data, signal);
+}
+EXPORT_SYMBOL_GPL(pixel_mgm_slc_update_signal);
+
 void pixel_mgm_slc_inc_refcount(struct memory_group_manager_device* mgm_dev)
 {
 	struct mgm_groups *const data = mgm_dev->data;

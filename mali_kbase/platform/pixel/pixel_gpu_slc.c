@@ -126,6 +126,16 @@ void gpu_slc_kctx_idle(struct kbase_context *kctx)
 }
 
 /**
+ * gpu_slc_tick_tock() - Called when a GPU scheduling kick occurs
+ *
+ * @kbdev: The &struct kbase_device for the GPU.
+ */
+void gpu_slc_tick_tock(struct kbase_device *kbdev)
+{
+	pixel_mgm_slc_update_signal(kbdev->mgm_dev, 0);
+}
+
+/**
  * gpu_slc_init - Initialize the SLC context for the GPU
  *
  * @kbdev: The &struct kbase_device for the GPU.

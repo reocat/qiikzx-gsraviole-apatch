@@ -6,11 +6,13 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/io.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/dev_printk.h>
 /* Pixel integration includes */
+#include <soc/google/acpm_ipc_ctrl.h>
 #include "pixel_slc.h"
 
 
@@ -38,6 +40,7 @@
 #define PBHA_BIT_MASK (0xf)
 
 #define PARTITION_DISABLE_HYSTERESIS (msecs_to_jiffies(100))
+#define PARTITION_ENABLE_THRESHOLD   (7)
 
 
 /**
@@ -53,7 +56,7 @@ static bool partition_required(struct slc_partition *pt)
 {
 	lockdep_assert_held(&pt->lock);
 
-	return atomic_read(&pt->refcount);
+	return atomic_read(&pt->refcount) && (pt->signal >= PARTITION_ENABLE_THRESHOLD);
 }
 
 /**
@@ -225,6 +228,29 @@ void slc_dec_refcount(struct slc_data *data)
 	}
 }
 
+void slc_update_signal(struct slc_data *data, u64 signal)
+{
+	struct slc_partition *pt = &data->partition;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pt->lock, flags);
+
+	/* Use ACPM signal when available */
+	if (data->signal)
+		pt->signal = ioread64((u64 __iomem*)data->signal);
+	else
+		pt->signal = signal;
+
+	if (partition_required(pt))
+		/* Enable the partition immediately if it's required */
+		enable_partition(data, pt);
+	else
+		/* Lazily disable the partition if it's no longer required */
+		queue_disable_worker(data);
+
+	spin_unlock_irqrestore(&pt->lock, flags);
+}
+
 /**
  * init_partition - Register and initialize a partition with the SLC driver.
  *
@@ -264,6 +290,7 @@ static int init_partition(struct slc_data *data, struct slc_partition *pt, u32 i
 		.pbha = pbha,
 		.enabled = false,
 		.refcount = ATOMIC_INIT(0),
+		.signal = 0,
 	};
 	spin_lock_init(&pt->lock);
 
@@ -314,6 +341,22 @@ int slc_init_data(struct slc_data *data, struct device* dev)
 		ret = PTR_ERR(data->pt_handle);
 		dev_err(data->dev, "pt_client_register failed with: %d\n", ret);
 		goto err_exit;
+	}
+
+	if (IS_ENABLED(PIXEL_GPU_SLC_ACPM_SIGNAL)) {
+		u32 size;
+
+		/* Obtain a handle to the ACPM provided GPU partition signal */
+		if ((ret = acpm_ipc_get_buffer("GPU_SIGNAL", &data->signal, &size))) {
+			dev_err(data->dev, "failed to retrieve SLC GPU signal: %d", ret);
+			goto err_exit;
+		}
+
+		/* Validate the signal buffer size */
+		if (size != sizeof(u64)) {
+			dev_err(data->dev, "SLC GPU signal size incorrect: %d", size);
+			goto err_exit;
+		}
 	}
 
 	if ((ret = init_partition(data, &data->partition, 0)))
