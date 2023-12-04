@@ -440,6 +440,14 @@ struct exynos_panel_funcs {
 	 */
 	unsigned int (*get_te_usec)(struct exynos_panel *exynos_panel,
 				    const struct exynos_panel_mode *pmode);
+
+	/**
+	 * @on_queue_ddic_cmd
+	 *
+	 * This callback is to nofity the panel driver when a ddic command is queued.
+	 */
+	void (*on_queue_ddic_cmd)(struct exynos_panel *exynos_panel,
+			const struct mipi_dsi_msg *msg, const bool is_last);
 };
 
 /**
