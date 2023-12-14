@@ -20,8 +20,14 @@
  */
 
 #if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+
 #include "mali_power_gpu_work_period_trace.h"
 #include <mali_kbase_gpu_metrics.h>
+#include <mali_kbase_config_defaults.h>
+#include <mali_kbase.h>
+
+#include <linux/module.h>
+#include <linux/slab.h>
 
 /**
  * enum gpu_metrics_ctx_flags - Flags for the GPU metrics context
@@ -36,8 +42,14 @@
  */
 enum gpu_metrics_ctx_flags {
 	ACTIVE_INTERVAL_IN_WP = 1 << 0,
-	INSIDE_ACTIVE_LIST    = 1 << 1,
+	INSIDE_ACTIVE_LIST = 1 << 1,
 };
+
+static unsigned long gpu_metrics_tp_emit_interval_ns = DEFAULT_GPU_METRICS_TP_EMIT_INTERVAL_NS;
+
+module_param(gpu_metrics_tp_emit_interval_ns, ulong, 0444);
+MODULE_PARM_DESC(gpu_metrics_tp_emit_interval_ns,
+		 "Time interval in nano seconds at which GPU metrics tracepoints are emitted");
 
 static inline bool gpu_metrics_ctx_flag(struct kbase_gpu_metrics_ctx *gpu_metrics_ctx,
 					enum gpu_metrics_ctx_flags flag)
@@ -61,28 +73,25 @@ static inline void validate_tracepoint_data(struct kbase_gpu_metrics_ctx *gpu_me
 					    u64 start_time, u64 end_time, u64 total_active)
 {
 #ifdef CONFIG_MALI_DEBUG
-	WARN(total_active > NSEC_PER_SEC,
-	     "total_active %llu > 1 second for aid %u active_cnt %u",
+	WARN(total_active > NSEC_PER_SEC, "total_active %llu > 1 second for aid %u active_cnt %u",
 	     total_active, gpu_metrics_ctx->aid, gpu_metrics_ctx->active_cnt);
 
-	WARN(start_time >= end_time,
-	     "start_time %llu >= end_time %llu for aid %u active_cnt %u",
+	WARN(start_time >= end_time, "start_time %llu >= end_time %llu for aid %u active_cnt %u",
 	     start_time, end_time, gpu_metrics_ctx->aid, gpu_metrics_ctx->active_cnt);
 
 	WARN(total_active > (end_time - start_time),
 	     "total_active %llu > end_time %llu - start_time %llu for aid %u active_cnt %u",
-	     total_active, end_time, start_time,
-	     gpu_metrics_ctx->aid, gpu_metrics_ctx->active_cnt);
+	     total_active, end_time, start_time, gpu_metrics_ctx->aid, gpu_metrics_ctx->active_cnt);
 
 	WARN(gpu_metrics_ctx->prev_wp_active_end_time > start_time,
 	     "prev_wp_active_end_time %llu > start_time %llu for aid %u active_cnt %u",
-	     gpu_metrics_ctx->prev_wp_active_end_time, start_time,
-	     gpu_metrics_ctx->aid, gpu_metrics_ctx->active_cnt);
+	     gpu_metrics_ctx->prev_wp_active_end_time, start_time, gpu_metrics_ctx->aid,
+	     gpu_metrics_ctx->active_cnt);
 #endif
 }
 
-static void emit_tracepoint_for_active_gpu_metrics_ctx(struct kbase_device *kbdev,
-			struct kbase_gpu_metrics_ctx *gpu_metrics_ctx, u64 current_time)
+static void emit_tracepoint_for_active_gpu_metrics_ctx(
+	struct kbase_device *kbdev, struct kbase_gpu_metrics_ctx *gpu_metrics_ctx, u64 current_time)
 {
 	const u64 start_time = gpu_metrics_ctx->first_active_start_time;
 	u64 total_active = gpu_metrics_ctx->total_active;
@@ -90,9 +99,13 @@ static void emit_tracepoint_for_active_gpu_metrics_ctx(struct kbase_device *kbde
 
 	/* Check if the GPU activity is currently ongoing */
 	if (gpu_metrics_ctx->active_cnt) {
+		/* The following check is to handle the race on CSF GPUs that can happen between
+		 * the draining of trace buffer and FW emitting the ACT=1 event .
+		 */
+		if (unlikely(current_time == gpu_metrics_ctx->last_active_start_time))
+			current_time++;
 		end_time = current_time;
-		total_active +=
-			end_time - gpu_metrics_ctx->last_active_start_time;
+		total_active += end_time - gpu_metrics_ctx->last_active_start_time;
 
 		gpu_metrics_ctx->first_active_start_time = current_time;
 		gpu_metrics_ctx->last_active_start_time = current_time;
@@ -101,8 +114,7 @@ static void emit_tracepoint_for_active_gpu_metrics_ctx(struct kbase_device *kbde
 		gpu_metrics_ctx_flag_clear(gpu_metrics_ctx, ACTIVE_INTERVAL_IN_WP);
 	}
 
-	trace_gpu_work_period(kbdev->id, gpu_metrics_ctx->aid,
-			      start_time, end_time, total_active);
+	trace_gpu_work_period(kbdev->id, gpu_metrics_ctx->aid, start_time, end_time, total_active);
 
 	validate_tracepoint_data(gpu_metrics_ctx, start_time, end_time, total_active);
 	gpu_metrics_ctx->prev_wp_active_end_time = end_time;
@@ -120,8 +132,8 @@ void kbase_gpu_metrics_ctx_put(struct kbase_device *kbdev,
 		return;
 
 	if (gpu_metrics_ctx_flag(gpu_metrics_ctx, ACTIVE_INTERVAL_IN_WP))
-		emit_tracepoint_for_active_gpu_metrics_ctx(kbdev,
-			gpu_metrics_ctx, ktime_get_raw_ns());
+		emit_tracepoint_for_active_gpu_metrics_ctx(kbdev, gpu_metrics_ctx,
+							   ktime_get_raw_ns());
 
 	list_del_init(&gpu_metrics_ctx->link);
 	kfree(gpu_metrics_ctx);
@@ -200,7 +212,7 @@ void kbase_gpu_metrics_ctx_end_activity(struct kbase_context *kctx, u64 timestam
 	}
 
 	/* Due to conversion from system timestamp to CPU timestamp (which involves rounding)
-	 * the value for start and end timestamp could come as same.
+	 * the value for start and end timestamp could come as same on CSF GPUs.
 	 */
 	if (timestamp_ns == gpu_metrics_ctx->last_active_start_time) {
 		gpu_metrics_ctx->last_active_end_time = timestamp_ns + 1;
@@ -208,9 +220,9 @@ void kbase_gpu_metrics_ctx_end_activity(struct kbase_context *kctx, u64 timestam
 		return;
 	}
 
-	/* The following check is to detect the situation where 'ACT=0' event was not visible to
-	 * the Kbase even though the system timestamp value sampled by FW was less than the system
-	 * timestamp value sampled by Kbase just before the draining of trace buffer.
+	/* The following check is to detect the situation on CSF GPUs, where 'ACT=0' event was not
+	 * visible to the Kbase even though the system timestamp value sampled by FW was less than
+	 * the system timestamp value sampled by Kbase just before the draining of trace buffer.
 	 */
 	if (gpu_metrics_ctx->last_active_start_time == gpu_metrics_ctx->first_active_start_time &&
 	    gpu_metrics_ctx->prev_wp_active_end_time == gpu_metrics_ctx->first_active_start_time) {
@@ -247,6 +259,14 @@ int kbase_gpu_metrics_init(struct kbase_device *kbdev)
 	INIT_LIST_HEAD(&kbdev->gpu_metrics.active_list);
 	INIT_LIST_HEAD(&kbdev->gpu_metrics.inactive_list);
 
+	if (!gpu_metrics_tp_emit_interval_ns || (gpu_metrics_tp_emit_interval_ns >= NSEC_PER_SEC)) {
+		dev_warn(
+			kbdev->dev,
+			"Invalid value (%lu ns) for module param gpu_metrics_tp_emit_interval_ns. Using default value: %u ns",
+			gpu_metrics_tp_emit_interval_ns, DEFAULT_GPU_METRICS_TP_EMIT_INTERVAL_NS);
+		gpu_metrics_tp_emit_interval_ns = DEFAULT_GPU_METRICS_TP_EMIT_INTERVAL_NS;
+	}
+
 	dev_info(kbdev->dev, "GPU metrics tracepoint support enabled");
 	return 0;
 }
@@ -255,6 +275,11 @@ void kbase_gpu_metrics_term(struct kbase_device *kbdev)
 {
 	WARN_ON_ONCE(!list_empty(&kbdev->gpu_metrics.active_list));
 	WARN_ON_ONCE(!list_empty(&kbdev->gpu_metrics.inactive_list));
+}
+
+unsigned long kbase_gpu_metrics_get_tp_emit_interval(void)
+{
+	return gpu_metrics_tp_emit_interval_ns;
 }
 
 #endif
