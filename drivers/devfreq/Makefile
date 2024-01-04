@@ -19,3 +19,7 @@ obj-$(CONFIG_ARM_TEGRA20_DEVFREQ)	+= tegra20-devfreq.o
 obj-$(CONFIG_PM_DEVFREQ_EVENT)		+= event/
 
 obj-$(CONFIG_SOC_GOOGLE)		+= google/
+
+CFLAGS_tensor_aio.o := -I$(srctree)/include \
+		       -I$(srctree)/drivers \
+		       -I$(srctree)/kernel/sched
