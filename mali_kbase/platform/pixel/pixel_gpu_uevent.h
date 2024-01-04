@@ -71,4 +71,6 @@ struct gpu_uevent {
 
 void pixel_gpu_uevent_send(struct kbase_device *kbdev, const struct gpu_uevent *evt);
 
+void pixel_gpu_uevent_kmd_error_send(struct kbase_device *kbdev, const enum gpu_uevent_info info);
+
 #endif /* _PIXEL_GPU_UEVENT_H_ */

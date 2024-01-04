@@ -2670,11 +2670,7 @@ int kbase_pm_wait_for_l2_powered(struct kbase_device *kbdev)
 #endif
 
 	if (!remaining) {
-		const struct gpu_uevent evt = {
-			.type = GPU_UEVENT_TYPE_KMD_ERROR,
-			.info = GPU_UEVENT_INFO_L2_PM_TIMEOUT
-		};
-		pixel_gpu_uevent_send(kbdev, &evt);
+		pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_L2_PM_TIMEOUT);
 		kbase_pm_timed_out(kbdev, "Wait for desired PM state with L2 powered timed out");
 		err = -ETIMEDOUT;
 	} else if (remaining < 0) {
@@ -2714,11 +2710,7 @@ static int pm_wait_for_desired_state(struct kbase_device *kbdev, bool killable_w
 		remaining = wait_event_timeout(kbdev->pm.backend.gpu_in_desired_state_wait,
 					       kbase_pm_is_in_desired_state(kbdev), timeout);
 	if (!remaining) {
-		const struct gpu_uevent evt = {
-			.type = GPU_UEVENT_TYPE_KMD_ERROR,
-			.info = GPU_UEVENT_INFO_PM_TIMEOUT
-		};
-		pixel_gpu_uevent_send(kbdev, &evt);
+		pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_PM_TIMEOUT);
 		kbase_pm_timed_out(kbdev, "Wait for power transition timed out");
 		err = -ETIMEDOUT;
 	} else if (remaining < 0) {

@@ -93,3 +93,13 @@ void pixel_gpu_uevent_send(struct kbase_device *kbdev, const struct gpu_uevent *
     if (!suppress_uevent)
         kobject_uevent_env(&kbdev->dev->kobj, KOBJ_CHANGE, env);
 }
+
+void pixel_gpu_uevent_kmd_error_send(struct kbase_device *kbdev, const enum gpu_uevent_info info)
+{
+    const struct gpu_uevent evt = {
+        .type = GPU_UEVENT_TYPE_KMD_ERROR,
+        .info = info
+    };
+
+    pixel_gpu_uevent_send(kbdev, &evt);
+}
