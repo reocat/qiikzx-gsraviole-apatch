@@ -491,7 +491,7 @@ static void s6e3hc3_c10_update_refresh_mode(struct exynos_panel *ctx,
 	ctx->panel_idle_vrefresh = idle_vrefresh;
 	s6e3hc3_c10_update_panel_feat(ctx, pmode, false);
 	te2_state_changed(ctx->bl);
-	notify_panel_mode_changed(ctx);
+	notify_panel_mode_changed(ctx, false);
 }
 
 static void s6e3hc3_c10_change_frequency(struct exynos_panel *ctx,

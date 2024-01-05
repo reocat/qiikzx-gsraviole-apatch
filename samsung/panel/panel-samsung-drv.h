@@ -613,6 +613,12 @@ struct display_stats {
 	bool initialized;
 };
 
+struct notify_state_change {
+	struct work_struct work;
+	struct wakeup_source *ws;
+	bool abort_suspend;
+};
+
 struct exynos_panel {
 	struct device *dev;
 	struct drm_panel panel;
@@ -705,7 +711,9 @@ struct exynos_panel {
 	enum exynos_cabc_mode current_cabc_mode;
 
 	/* use for notify state changed */
-	struct work_struct notify_panel_mode_changed_work;
+	bool allow_wakeup_by_state_change;
+	struct notify_state_change notify_panel_mode_changed;
+	struct work_struct notify_brightness_changed_work;
 
 	/* use for display stats residence */
 	struct display_stats disp_stats;
@@ -852,9 +860,10 @@ static inline void te2_state_changed(struct backlight_device *bl)
 	sysfs_notify(&bl->dev.kobj, NULL, "te2_state");
 }
 
-static inline void notify_panel_mode_changed(struct exynos_panel *ctx)
+static inline void notify_panel_mode_changed(struct exynos_panel *ctx, bool abort_suspend)
 {
-	schedule_work(&ctx->notify_panel_mode_changed_work);
+	ctx->notify_panel_mode_changed.abort_suspend = abort_suspend;
+	schedule_work(&ctx->notify_panel_mode_changed.work);
 }
 
 static inline u32 get_current_frame_duration_us(struct exynos_panel *ctx)

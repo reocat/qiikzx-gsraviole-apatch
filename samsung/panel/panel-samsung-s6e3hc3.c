@@ -536,7 +536,7 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	if (pmode->exynos_mode.is_lp_mode) {
 		/* set 10Hz while self refresh is active, otherwise clear it */
 		ctx->panel_idle_vrefresh = enable ? 10 : 0;
-		notify_panel_mode_changed(ctx);
+		notify_panel_mode_changed(ctx, true);
 		return false;
 	}
 
@@ -550,7 +550,7 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY) {
 			/* simply update idle vrefresh follow by self refresh */
 			ctx->panel_idle_vrefresh = enable ? idle_vrefresh : 0;
-			notify_panel_mode_changed(ctx);
+			notify_panel_mode_changed(ctx, false);
 			if (spanel->auto_mode_vrefresh != idle_vrefresh) {
 				dev_dbg(ctx->dev,
 					"early exit update needed for mode: %s (idle_vrefresh: %d)\n",
@@ -593,7 +593,7 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	}
 	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
 
-	notify_panel_mode_changed(ctx);
+	notify_panel_mode_changed(ctx, false);
 
 	DPU_ATRACE_END(__func__);
 
