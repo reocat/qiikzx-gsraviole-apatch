@@ -215,7 +215,7 @@ static int write_cmd(struct kbase_device *kbdev, unsigned int as_nr, u32 cmd)
 #if MALI_USE_CSF
 static int wait_l2_power_trans_complete(struct kbase_device *kbdev)
 {
-	u32 val;
+	u64 val;
 	const u32 timeout_us =
 		kbase_get_timeout_ms(kbdev, MMU_AS_INACTIVE_WAIT_TIMEOUT) * USEC_PER_MSEC;
 	const int err = kbase_reg_poll64_timeout(kbdev, GPU_CONTROL_ENUM(L2_PWRTRANS), val,
