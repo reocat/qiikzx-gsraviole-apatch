@@ -67,6 +67,9 @@ void pixel_gpu_uevent_send(struct kbase_device *kbdev, const struct gpu_uevent *
     unsigned long flags, current_ts = jiffies;
     bool suppress_uevent = false;
 
+    if (WARN_ON(in_interrupt()))
+        return;
+
     if (!gpu_uevent_check_valid(evt)) {
         dev_err(kbdev->dev, "unrecognized uevent type=%u info=%u", evt->type, evt->info);
         return;
