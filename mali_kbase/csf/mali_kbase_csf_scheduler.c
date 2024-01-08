@@ -1114,6 +1114,7 @@ static bool scheduler_protm_wait_quit(struct kbase_device *kbdev)
 		dev_warn(kbdev->dev, "[%llu] Timeout (%d ms), protm_quit wait skipped",
 			 kbase_backend_get_cycle_cnt(kbdev), fw_timeout_ms);
 		schedule_actions_trigger_df(kbdev, kctx, DF_PROTECTED_MODE_EXIT_TIMEOUT);
+		pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_PMODE_EXIT_TIMEOUT);
 		success = false;
 	}
 
@@ -4504,10 +4505,12 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 				err = kbase_csf_wait_protected_mode_enter(kbdev);
 				up_write(&kbdev->csf.pmode_sync_sem);
 
-				if (err)
+				if (err) {
+					pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_PMODE_ENTRY_FAILURE);
 					schedule_actions_trigger_df(
 						kbdev, input_grp->kctx,
 						DF_PROTECTED_MODE_ENTRY_FAILURE);
+				}
 
 				scheduler->protm_enter_time = ktime_get_raw();
 
@@ -5944,7 +5947,7 @@ static void evict_lru_or_blocked_csg(struct kbase_device *kbdev)
 		suspend_queue_group(lru_idle_group);
 		if (wait_csg_slots_suspend(kbdev, &slot_mask)) {
 			enum dumpfault_error_type error_type = DF_CSG_SUSPEND_TIMEOUT;
-
+			pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_CSG_SUSPEND);
 			dev_warn(
 				kbdev->dev,
 				"[%llu] LRU idle group %d of context %d_%d failed to suspend on slot %d (timeout %d ms)",

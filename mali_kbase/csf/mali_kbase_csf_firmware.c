@@ -31,6 +31,7 @@
 #include "mali_kbase_reset_gpu.h"
 #include "mali_kbase_ctx_sched.h"
 #include "mali_kbase_csf_scheduler.h"
+#include "mali_kbase_config_defaults.h"
 #include <mali_kbase_hwaccess_time.h>
 #include "device/mali_kbase_device.h"
 #include "backend/gpu/mali_kbase_pm_internal.h"
@@ -1558,6 +1559,7 @@ static void firmware_error_worker(struct work_struct *const data)
 {
 	struct kbase_device *const kbdev =
 		container_of(data, struct kbase_device, csf.fw_error_work);
+	pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_FW_ERROR);
 
 	handle_internal_firmware_fatal(kbdev);
 }

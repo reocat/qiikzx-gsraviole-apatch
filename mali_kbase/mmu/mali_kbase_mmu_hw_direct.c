@@ -28,6 +28,7 @@
 #include <mmu/mali_kbase_mmu_hw.h>
 #include <tl/mali_kbase_tracepoints.h>
 #include <linux/delay.h>
+#include "mali_kbase_config_defaults.h"
 
 #if MALI_USE_CSF
 /**
@@ -179,6 +180,7 @@ static int wait_ready(struct kbase_device *kbdev, unsigned int as_nr)
 	if (!err)
 		return 0;
 
+	pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_MMU_AS_ACTIVE_STUCK);
 	dev_err(kbdev->dev,
 		"AS_ACTIVE bit stuck for as %u. Might be caused by unstable GPU clk/pwr or faulty system",
 		as_nr);

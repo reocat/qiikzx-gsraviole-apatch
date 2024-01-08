@@ -40,6 +40,7 @@
 #include <tl/mali_kbase_tracepoints.h>
 #include "mali_kbase_csf_mcu_shared_reg.h"
 #include <linux/version_compat_defs.h>
+#include "mali_kbase_config_defaults.h"
 
 #define CS_REQ_EXCEPTION_MASK (CS_REQ_FAULT_MASK | CS_REQ_FATAL_MASK)
 #define CS_ACK_EXCEPTION_MASK (CS_ACK_FAULT_MASK | CS_ACK_FATAL_MASK)
@@ -1922,6 +1923,7 @@ static void report_tiler_oom_error(struct kbase_queue_group *group)
 
 	kbase_csf_event_add_error(group->kctx, &group->error_fatal, &error);
 	kbase_event_wakeup_sync(group->kctx);
+	pixel_gpu_uevent_kmd_error_send(group->kctx->kbdev, GPU_UEVENT_INFO_TILER_OOM);
 }
 
 static void flush_gpu_cache_on_fatal_error(struct kbase_device *kbdev)
@@ -2108,6 +2110,7 @@ static void timer_event_worker(struct work_struct *data)
 	struct kbase_device *const kbdev = kctx->kbdev;
 	bool reset_prevented = false;
 	int err = kbase_reset_gpu_prevent_and_wait(kbdev);
+	pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_PROGRESS_TIMER);
 
 	if (err)
 		dev_warn(
@@ -2366,6 +2369,7 @@ static void cs_error_worker(struct work_struct *const data)
 	bool reset_prevented = false;
 	int err;
 
+	pixel_gpu_uevent_kmd_error_send(kbdev, GPU_UEVENT_INFO_CS_ERROR);
 	kbase_debug_csf_fault_wait_completion(kbdev);
 	err = kbase_reset_gpu_prevent_and_wait(kbdev);
 

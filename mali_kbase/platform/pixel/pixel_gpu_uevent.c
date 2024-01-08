@@ -36,9 +36,17 @@ static bool gpu_uevent_check_valid(const struct gpu_uevent *evt)
         case GPU_UEVENT_INFO_CSG_SLOT_READY:
         case GPU_UEVENT_INFO_L2_PM_TIMEOUT:
         case GPU_UEVENT_INFO_PM_TIMEOUT:
+        case GPU_UEVENT_INFO_TILER_OOM:
+        case GPU_UEVENT_INFO_PROGRESS_TIMER:
+        case GPU_UEVENT_INFO_CS_ERROR:
+        case GPU_UEVENT_INFO_FW_ERROR:
+        case GPU_UEVENT_INFO_PMODE_EXIT_TIMEOUT:
+        case GPU_UEVENT_INFO_PMODE_ENTRY_FAILURE:
+        case GPU_UEVENT_INFO_GPU_PAGE_FAULT:
+        case GPU_UEVENT_INFO_MMU_AS_ACTIVE_STUCK:
             return true;
         default:
-            break;
+            return false;
         }
     case GPU_UEVENT_TYPE_GPU_RESET:
         switch (evt->info) {
@@ -46,7 +54,7 @@ static bool gpu_uevent_check_valid(const struct gpu_uevent *evt)
         case GPU_UEVENT_INFO_CSF_RESET_FAILED:
             return true;
         default:
-            break;
+            return false;
         }
     default:
         break;
