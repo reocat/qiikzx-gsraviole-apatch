@@ -62,6 +62,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_GATOR_SUPPORT ?= y
         CONFIG_MALI_ARBITRATION ?= n
         CONFIG_MALI_PARTITION_MANAGER ?= n
+        CONFIG_MALI_64BIT_HW_ACCESS ?= n
 
         ifneq ($(CONFIG_MALI_NO_MALI),y)
             # Prevent misuse when CONFIG_MALI_NO_MALI=y
@@ -122,10 +123,8 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         else
             # Prevent misuse when CONFIG_MALI_EXPERT=n
             CONFIG_MALI_CORESTACK = n
-            CONFIG_LARGE_PAGE_ALLOC_OVERRIDE = n
-            CONFIG_LARGE_PAGE_ALLOC = n
+            CONFIG_LARGE_PAGE_SUPPORT = y
             CONFIG_MALI_PWRSOFT_765 = n
-            CONFIG_MALI_MEMORY_FULLY_BACKED = n
             CONFIG_MALI_JOB_DUMP = n
             CONFIG_MALI_NO_MALI = n
             CONFIG_MALI_REAL_HW = y
@@ -174,7 +173,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     endif
 
     # All Mali CONFIG should be listed here
-    CONFIGS := \
+    CONFIGS += \
         CONFIG_MALI_MIDGARD \
         CONFIG_MALI_GATOR_SUPPORT \
         CONFIG_MALI_ARBITER_SUPPORT \
@@ -187,10 +186,8 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_DMA_BUF_LEGACY_COMPAT \
         CONFIG_MALI_EXPERT \
         CONFIG_MALI_CORESTACK \
-        CONFIG_LARGE_PAGE_ALLOC_OVERRIDE \
-        CONFIG_LARGE_PAGE_ALLOC \
+        CONFIG_LARGE_PAGE_SUPPORT \
         CONFIG_MALI_PWRSOFT_765 \
-        CONFIG_MALI_MEMORY_FULLY_BACKED \
         CONFIG_MALI_JOB_DUMP \
         CONFIG_MALI_NO_MALI \
         CONFIG_MALI_ERROR_INJECT \
@@ -220,6 +217,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_PIXEL_GPU_THERMAL \
         CONFIG_MALI_PIXEL_GPU_SECURE_RENDERING \
         CONFIG_MALI_PIXEL_GPU_SLC
+
 
 endif
 
@@ -259,7 +257,10 @@ endif
 #
 # KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 #
-EXTRA_SYMBOLS += $(OUT_DIR)/../google-modules/gpu/mali_pixel/Module.symvers
+BASE_SYMBOLS = $(OUT_DIR)/../google-modules/gpu/mali_pixel/Module.symvers
+
+EXTRA_SYMBOLS += \
+    $(BASE_SYMBOLS)
 
 CFLAGS_MODULE += -Wall -Werror
 

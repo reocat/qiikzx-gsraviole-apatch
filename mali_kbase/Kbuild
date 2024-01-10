@@ -72,7 +72,7 @@ endif
 CONFIG_MALI_PLATFORM_NAME="pixel"
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= '"r44p1-00dev3"'
+MALI_RELEASE_NAME ?= '"r47p0-01eac0"'
 # Set up defaults if not defined by build system
 ifeq ($(CONFIG_MALI_DEBUG), y)
     MALI_UNIT_TEST = 1
@@ -166,6 +166,7 @@ mali_kbase-y := \
     mali_kbase_cache_policy.o \
     mali_kbase_ccswe.o \
     mali_kbase_mem.o \
+    mali_kbase_reg_track.o \
     mali_kbase_mem_migrate.o \
     mali_kbase_mem_pool_group.o \
     mali_kbase_native_mgm.o \
@@ -174,7 +175,6 @@ mali_kbase-y := \
     mali_kbase_pm.o \
     mali_kbase_config.o \
     mali_kbase_kinstr_prfcnt.o \
-    mali_kbase_vinstr.o \
     mali_kbase_softjobs.o \
     mali_kbase_hw.o \
     mali_kbase_debug.o \
@@ -237,6 +237,7 @@ INCLUDE_SUBDIR = \
     $(src)/tl/Kbuild \
     $(src)/hwcnt/Kbuild \
     $(src)/gpu/Kbuild \
+    $(src)/hw_access/Kbuild \
     $(src)/thirdparty/Kbuild \
     $(src)/platform/$(MALI_PLATFORM_DIR)/Kbuild
 

@@ -27,14 +27,19 @@
 #define _KBASE_GPU_METRICS_H_
 
 #if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
-#include <mali_kbase.h>
+
+#include <linux/types.h>
+
+struct kbase_device;
+struct kbase_context;
+struct kbase_gpu_metrics_ctx;
 
 /**
- * kbase_gpu_metrics_get_emit_interval() - Return the trace point emission interval.
+ * kbase_gpu_metrics_get_tp_emit_interval() - Return the trace point emission interval.
  *
  * Return: The time interval in nanosecond for GPU metrics trace point emission.
  */
-unsigned long kbase_gpu_metrics_get_emit_interval(void);
+unsigned long kbase_gpu_metrics_get_tp_emit_interval(void);
 
 /**
  * kbase_gpu_metrics_ctx_put() - Decrement the Kbase context count for the GPU metrics
@@ -164,4 +169,4 @@ int kbase_gpu_metrics_init(struct kbase_device *kbdev);
 void kbase_gpu_metrics_term(struct kbase_device *kbdev);
 
 #endif
-#endif  /* _KBASE_GPU_METRICS_H_ */
+#endif /* _KBASE_GPU_METRICS_H_ */
