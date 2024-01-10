@@ -2765,7 +2765,7 @@ static int kbase_jit_grow(struct kbase_context *kctx, const struct base_jit_allo
 	if (reg->gpu_alloc->nents > info->commit_pages) {
 		kbase_mem_pool_unlock(pool);
 		spin_unlock(&kctx->mem_partials_lock);
-		dev_warn(
+		dev_info(
 			kctx->kbdev->dev,
 			"JIT alloc grown beyond the required number of initially required pages, this grow no longer needed.");
 		goto done;
