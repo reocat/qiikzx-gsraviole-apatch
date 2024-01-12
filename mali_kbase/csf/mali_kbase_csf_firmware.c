@@ -56,10 +56,9 @@
 #include <linux/delay.h>
 #include <linux/version_compat_defs.h>
 
-#define MALI_MAX_DEFAULT_FIRMWARE_NAME_LEN ((size_t)24)
-
-static char default_fw_name[MALI_MAX_DEFAULT_FIRMWARE_NAME_LEN] = "mali_csffw-r47p0.bin";
-module_param_string(fw_name, default_fw_name, sizeof(default_fw_name), 0644);
+static char release_fw_name[] = "mali_csffw-r47p0.bin";
+static char default_fw_name[] = "mali_csffw.bin";
+module_param_string(fw_name, release_fw_name, sizeof(release_fw_name), 0644);
 MODULE_PARM_DESC(fw_name, "firmware image");
 
 /* The waiting time for firmware to boot */
@@ -2407,7 +2406,8 @@ int kbase_csf_firmware_load_init(struct kbase_device *kbdev)
 	u32 entry_end_offset;
 	u32 entry_offset;
 	int ret;
-	const char *fw_name = default_fw_name;
+	const char *fw_name = release_fw_name;
+	const char *fallback_fw_name = default_fw_name;
 
 	lockdep_assert_held(&kbdev->fw_load_lock);
 
@@ -2457,8 +2457,17 @@ int kbase_csf_firmware_load_init(struct kbase_device *kbdev)
 
 #endif /* IS_ENABLED(CONFIG_OF) */
 
+	/* First we will attempt to open the named release version firmware, if
+	 * that fails, we will open the default one.
+	 * See b/297471843 for more information.
+	 */
 	if (request_firmware(&firmware, fw_name, kbdev->dev) != 0) {
-		dev_err(kbdev->dev, "Failed to load firmware image '%s'\n", fw_name);
+		/* No warning here, just a silent fallback */
+		ret = request_firmware(&firmware, fallback_fw_name, kbdev->dev);
+	}
+
+	if (ret) {
+		dev_err(kbdev->dev, "Failed to load firmware image '%s'\n", fallback_fw_name);
 		ret = -ENOENT;
 	} else {
 		/* Try to save a copy and then release the loaded firmware image */
