@@ -7351,7 +7351,7 @@ int kbase_csf_scheduler_init(struct kbase_device *kbdev)
 	scheduler->kthread_running = true;
 	scheduler->gpuq_kthread =
 		kbase_kthread_run_rt(kbdev, &kbase_csf_scheduler_kthread, kbdev, "mali-gpuq-kthread");
-	if (IS_ERR(scheduler->gpuq_kthread)) {
+	if (IS_ERR_OR_NULL(scheduler->gpuq_kthread)) {
 		kfree(scheduler->csg_slots);
 		scheduler->csg_slots = NULL;
 
@@ -7440,7 +7440,7 @@ void kbase_csf_scheduler_term(struct kbase_device *kbdev)
 {
 	struct kbase_csf_scheduler *scheduler = &kbdev->csf.scheduler;
 
-	if (scheduler->gpuq_kthread) {
+	if (!IS_ERR_OR_NULL(scheduler->gpuq_kthread)) {
 		scheduler->kthread_running = false;
 		complete(&scheduler->kthread_signal);
 		kthread_stop(scheduler->gpuq_kthread);

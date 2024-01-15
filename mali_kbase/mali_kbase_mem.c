@@ -2762,7 +2762,7 @@ static int kbase_jit_grow(struct kbase_context *kctx, const struct base_jit_allo
 		kbase_mem_pool_lock(pool);
 	}
 
-	if (reg->gpu_alloc->nents > info->commit_pages) {
+	if (reg->gpu_alloc->nents >= info->commit_pages) {
 		kbase_mem_pool_unlock(pool);
 		spin_unlock(&kctx->mem_partials_lock);
 		dev_info(
