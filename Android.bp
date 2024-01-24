@@ -119,6 +119,11 @@ cc_binary_host {
     ],
 }
 
+sh_binary_host {
+    name: "dtdiff",
+    src: "dtdiff",
+}
+
 genrule {
     name: "dtc_version_gen.h",
     out: ["version_gen.h"],
