@@ -37,7 +37,7 @@ license {
 }
 
 license {
-   name: "external_dtc_tests_license",
+    name: "external_dtc_tests_license",
     visibility: [":__subpackages__"],
     license_kinds: ["SPDX-license-identifier-LGPL-2.1+"],
     license_text: ["LGPL"],
@@ -59,7 +59,7 @@ cc_defaults {
     name: "dt_defaults",
     defaults: ["dtc_cflags_defaults"],
     cflags: [
-        "-DNO_YAML"
+        "-DNO_YAML",
     ],
 
     generated_headers: ["dtc_version_gen.h"],
@@ -132,8 +132,8 @@ genrule {
         "METADATA",
         "METADATA_version.sed",
     ],
-    cmd: "version=$$("
-       +     "sed -f $(location METADATA_version.sed) -n $(location METADATA)"
-       + ")-Android-build;"
-       + "sed s/@VCS_TAG@/$${version}/ $(in) > $(out)",
+    cmd: "version=$$(" +
+        "sed -f $(location METADATA_version.sed) -n $(location METADATA)" +
+        ")-Android-build;" +
+        "sed s/@VCS_TAG@/$${version}/ $(in) > $(out)",
 }
