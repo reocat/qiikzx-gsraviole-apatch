@@ -147,8 +147,8 @@ bool kbase_pm_is_l2_desired(struct kbase_device *kbdev)
 		return false;
 
 	/* We need to power up the L2 when the MCU is desired */
-	if (kbase_pm_is_mcu_desired(kbdev))
-		return true;
+	if (likely(kbdev->csf.firmware_inited))
+		return kbase_pm_is_mcu_desired(kbdev);
 #endif
 
 	return kbdev->pm.backend.l2_desired;
@@ -2300,7 +2300,7 @@ static bool kbase_pm_is_in_desired_state_nolock(struct kbase_device *kbdev)
 		 kbdev->pm.backend.shaders_state != KBASE_SHADERS_OFF_CORESTACK_OFF)
 		in_desired_state = false;
 #else
-	in_desired_state &= kbase_pm_mcu_is_in_desired_state(kbdev);
+	in_desired_state = kbase_pm_mcu_is_in_desired_state(kbdev);
 #endif
 
 	return in_desired_state;
