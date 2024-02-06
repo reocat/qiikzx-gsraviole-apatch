@@ -31,10 +31,6 @@
 
 #define CSF_FIRMWARE_CFG_LOG_VERBOSITY_ENTRY_NAME "Log verbosity"
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-#define HOST_CONTROLS_SC_RAILS_CFG_ENTRY_NAME "Host controls SC rails"
-#endif
-
 #define CSF_FIRMWARE_CFG_WA_CFG0_ENTRY_NAME "WA_CFG0"
 
 /**
@@ -138,11 +134,6 @@ static ssize_t store_fw_cfg(struct kobject *kobj, struct attribute *attr, const 
 			return -EINVAL;
 		}
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-		if (!strcmp(config->name,
-			    HOST_CONTROLS_SC_RAILS_CFG_ENTRY_NAME))
-			return -EPERM;
-#endif
 		if (!strcmp(config->name, CSF_FIRMWARE_CFG_WA_CFG0_ENTRY_NAME))
 			return -EPERM;
 
@@ -380,24 +371,6 @@ int kbase_csf_firmware_cfg_fw_wa_enable(struct kbase_device *kbdev)
 	return -ENOENT;
 }
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-int kbase_csf_firmware_cfg_enable_host_ctrl_sc_rails(struct kbase_device *kbdev)
-{
-	struct firmware_config *config;
-
-	list_for_each_entry(config, &kbdev->csf.firmware_config, node) {
-		if (strcmp(config->name,
-			   HOST_CONTROLS_SC_RAILS_CFG_ENTRY_NAME))
-			continue;
-
-		kbase_csf_update_firmware_memory(kbdev, config->address, 1);
-		return 0;
-	}
-
-	return -ENOENT;
-}
-#endif
-
 int kbase_csf_firmware_cfg_fw_wa_init(struct kbase_device *kbdev)
 {
 	int ret;
@@ -464,13 +437,6 @@ int kbase_csf_firmware_cfg_option_entry_parse(struct kbase_device *kbdev,
 {
 	return 0;
 }
-
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-int kbase_csf_firmware_cfg_enable_host_ctrl_sc_rails(struct kbase_device *kbdev)
-{
-	return 0;
-}
-#endif
 
 int kbase_csf_firmware_cfg_fw_wa_enable(struct kbase_device *kbdev)
 {

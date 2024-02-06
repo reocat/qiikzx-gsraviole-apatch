@@ -802,10 +802,6 @@ static void kbasep_pm_toggle_power_interrupt(struct kbase_device *kbdev, bool en
 
 	irq_mask = kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(GPU_IRQ_MASK));
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	/* For IFPO, we require the POWER_CHANGED_ALL interrupt to be always on */
-	enable = true;
-#endif
 	if (enable) {
 		irq_mask |= POWER_CHANGED_ALL;
 		kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(GPU_IRQ_CLEAR), POWER_CHANGED_ALL);
@@ -938,14 +934,6 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				backend->shaders_avail = backend->shaders_desired_mask;
 				backend->pm_shaders_core_mask = 0;
 				if (kbdev->csf.firmware_hctl_core_pwr) {
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-					/* On rail up, this state machine will be re-invoked */
-					if (backend->sc_power_rails_off) {
-						/* The work should already be queued or executing */
-						WARN_ON(!work_busy(&backend->sc_rails_on_work));
-						break;
-					}
-#endif
 					kbase_pm_invoke(kbdev, KBASE_PM_CORE_SHADER,
 							backend->shaders_avail, ACTION_PWRON);
 					backend->mcu_state = KBASE_MCU_HCTL_SHADERS_PEND_ON;
@@ -1310,31 +1298,6 @@ static void core_idle_worker(struct work_struct *work)
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 }
 #endif
-
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-static void sc_rails_on_worker(struct work_struct *work)
-{
-	struct kbase_device *kbdev =
-		container_of(work, struct kbase_device, pm.backend.sc_rails_on_work);
-	unsigned long flags;
-
-	/*
-	 * Intentionally not synchronized using the scheduler.lock, as the scheduler may be waiting
-	 * on the SC rail to power up
-	 */
-	kbase_pm_lock(kbdev);
-
-	kbase_pm_turn_on_sc_power_rails_locked(kbdev);
-
-	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
-	/* Push the state machine forward in case it was waiting on SC rail power up */
-	kbase_pm_update_state(kbdev);
-	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
-
-	kbase_pm_unlock(kbdev);
-}
-#endif /* CONFIG_MALI_HOST_CONTROLS_SC_RAILS */
-
 
 static const char *kbase_l2_core_state_to_string(enum kbase_l2_core_state state)
 {
@@ -2475,9 +2438,6 @@ int kbase_pm_state_machine_init(struct kbase_device *kbdev)
 	}
 
 	INIT_WORK(&kbdev->pm.backend.core_idle_work, core_idle_worker);
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	INIT_WORK(&kbdev->pm.backend.sc_rails_on_work, sc_rails_on_worker);
-#endif
 #endif
 
 	return 0;
@@ -2591,10 +2551,6 @@ void kbase_gpu_timeout_debug_message(struct kbase_device *kbdev, const char *tim
 		kbase_pm_is_l2_desired(kbdev), kbdev->pm.backend.policy_change_clamp_state_to_off);
 	dev_err(kbdev->dev, "\tL2 sw state = %d\n",
 		kbdev->pm.backend.l2_state);
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	dev_err(kbdev->dev, "\tbackend.sc_power_rails_off = %d\n",
-		kbdev->pm.backend.sc_power_rails_off);
-#endif
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 #endif
 	dev_err(kbdev->dev, "Current state :\n");
@@ -3642,11 +3598,6 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags)
 
 		kbdev->pm.backend.gpu_powered = true;
 	}
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	/* Ensure the SC rail is up otherwise the FW will get stuck during reset */
-	kbase_pm_turn_on_sc_power_rails_locked(kbdev);
-#endif
-
 
 	/* Ensure interrupts are off to begin with, this also clears any
 	 * outstanding interrupts

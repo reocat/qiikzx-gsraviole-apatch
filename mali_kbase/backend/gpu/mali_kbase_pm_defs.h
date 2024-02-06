@@ -361,10 +361,6 @@ struct kbase_pm_event_log {
  *                                     @callback_power_runtime_gpu_idle was
  *                                     called previously.
  *                                     See &struct kbase_pm_callback_conf.
- * @callback_power_on_sc_rails: Callback invoked to turn on the shader core
- *                              power rails. See &struct kbase_pm_callback_conf.
- * @callback_power_off_sc_rails: Callback invoked to turn off the shader core
- *                               power rails. See &struct kbase_pm_callback_conf.
  * @ca_cores_enabled: Cores that are currently available
  * @apply_hw_issue_TITANHW_2938_wa: Indicates if the workaround for BASE_HW_ISSUE_TITANHW_2938
  *                                  needs to be applied when unmapping memory from GPU.
@@ -536,10 +532,6 @@ struct kbase_pm_backend_data {
 	void (*callback_hardware_reset)(struct kbase_device *kbdev);
 	void (*callback_power_runtime_gpu_idle)(struct kbase_device *kbdev);
 	void (*callback_power_runtime_gpu_active)(struct kbase_device *kbdev);
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	void (*callback_power_on_sc_rails)(struct kbase_device *kbdev);
-	void (*callback_power_off_sc_rails)(struct kbase_device *kbdev);
-#endif
 
 	u64 ca_cores_enabled;
 
@@ -558,11 +550,6 @@ struct kbase_pm_backend_data {
 	struct mutex policy_change_lock;
 	struct workqueue_struct *core_idle_wq;
 	struct work_struct core_idle_work;
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	struct work_struct sc_rails_on_work;
-	bool sc_power_rails_off;
-	bool sc_pwroff_safe;
-#endif
 
 #ifdef KBASE_PM_RUNTIME
 	bool gpu_sleep_supported;

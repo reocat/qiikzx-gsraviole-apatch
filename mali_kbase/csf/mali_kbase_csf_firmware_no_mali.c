@@ -768,14 +768,11 @@ static void global_init(struct kbase_device *const kbdev, u64 core_mask)
 
 	set_timeout_global(global_iface, kbase_csf_timeout_get(kbdev));
 
-#ifndef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
 	/* The GPU idle timer is always enabled for simplicity. Checks will be
 	 * done before scheduling the GPU idle worker to see if it is
 	 * appropriate for the current power policy.
 	 */
 	enable_gpu_idle_timer(kbdev);
-#endif
-
 
 	/* Unmask the interrupts */
 	kbase_csf_firmware_global_input(global_iface, GLB_ACK_IRQ_MASK, ack_irq_mask);
@@ -992,49 +989,29 @@ u32 kbase_csf_firmware_set_gpu_idle_hysteresis_time(struct kbase_device *kbdev, 
 		return kbdev->csf.gpu_idle_dur_count;
 	}
 
-#ifndef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
 	/* The 'reg_lock' is also taken and is held till the update is not
 	 * complete, to ensure the update of idle timer value by multiple Users
 	 * gets serialized.
 	 */
 	mutex_lock(&kbdev->csf.reg_lock);
-#endif
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	kbase_csf_scheduler_lock(kbdev);
-	if (kbdev->csf.scheduler.gpu_idle_fw_timer_enabled) {
-#endif /* CONFIG_MALI_HOST_CONTROLS_SC_RAILS */
-		/* The firmware only reads the new idle timer value when the timer is
-		 * disabled.
-		 */
-		kbase_csf_scheduler_spin_lock(kbdev, &flags);
-		kbase_csf_firmware_disable_gpu_idle_timer(kbdev);
-		kbase_csf_scheduler_spin_unlock(kbdev, flags);
-		/* Ensure that the request has taken effect */
-		wait_for_global_request(kbdev, GLB_REQ_IDLE_DISABLE_MASK);
+	/* The firmware only reads the new idle timer value when the timer is
+	 * disabled.
+	 */
+	kbase_csf_scheduler_spin_lock(kbdev, &flags);
+	kbase_csf_firmware_disable_gpu_idle_timer(kbdev);
+	kbase_csf_scheduler_spin_unlock(kbdev, flags);
+	/* Ensure that the request has taken effect */
+	wait_for_global_request(kbdev, GLB_REQ_IDLE_DISABLE_MASK);
 
-		kbase_csf_scheduler_spin_lock(kbdev, &flags);
-		kbdev->csf.gpu_idle_hysteresis_ns = dur_ns;
-		kbdev->csf.gpu_idle_dur_count = hysteresis_val;
-		kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
-		kbase_csf_firmware_enable_gpu_idle_timer(kbdev);
-		kbase_csf_scheduler_spin_unlock(kbdev, flags);
-		wait_for_global_request(kbdev, GLB_REQ_IDLE_ENABLE_MASK);
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	} else {
-		/* Record the new values. Would be used later when timer is
-		 * enabled
-		 */
-		kbase_csf_scheduler_spin_lock(kbdev, &flags);
-		kbdev->csf.gpu_idle_hysteresis_ns = dur_ns;
-		kbdev->csf.gpu_idle_dur_count = hysteresis_val;
-		kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
-		kbase_csf_scheduler_spin_unlock(kbdev, flags);
-	}
-	kbase_csf_scheduler_unlock(kbdev);
-#else
+	kbase_csf_scheduler_spin_lock(kbdev, &flags);
+	kbdev->csf.gpu_idle_hysteresis_ns = dur_ns;
+	kbdev->csf.gpu_idle_dur_count = hysteresis_val;
+	kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
+	kbase_csf_firmware_enable_gpu_idle_timer(kbdev);
+	kbase_csf_scheduler_spin_unlock(kbdev, flags);
+	wait_for_global_request(kbdev, GLB_REQ_IDLE_ENABLE_MASK);
 	mutex_unlock(&kbdev->csf.reg_lock);
-#endif
 
 	kbase_csf_scheduler_pm_idle(kbdev);
 	kbase_reset_gpu_allow(kbdev);

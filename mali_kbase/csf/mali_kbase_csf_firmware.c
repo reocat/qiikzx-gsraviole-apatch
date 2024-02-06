@@ -1774,13 +1774,6 @@ static void global_init(struct kbase_device *const kbdev, u64 core_mask)
 	const struct kbase_csf_global_iface *const global_iface = &kbdev->csf.global_iface;
 	unsigned long flags;
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	/* If the power_policy will grant host control over FW PM, we need to turn on the SC rail*/
-	if (kbdev->csf.firmware_hctl_core_pwr) {
-		queue_work(system_highpri_wq, &kbdev->pm.backend.sc_rails_on_work);
-	}
-#endif
-
 	kbase_csf_scheduler_spin_lock(kbdev, &flags);
 
 	kbasep_enable_rtu(kbdev);
@@ -1789,13 +1782,11 @@ static void global_init(struct kbase_device *const kbdev, u64 core_mask)
 	enable_endpoints_global(global_iface, core_mask);
 	set_shader_poweroff_timer(kbdev, global_iface);
 
-#ifndef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
 	/* The GPU idle timer is always enabled for simplicity. Checks will be
 	 * done before scheduling the GPU idle worker to see if it is
 	 * appropriate for the current power policy.
 	 */
 	enable_gpu_idle_timer(kbdev);
-#endif
 
 	set_timeout_global(global_iface, kbase_csf_timeout_get(kbdev));
 
@@ -1867,9 +1858,7 @@ void kbase_csf_firmware_global_reinit(struct kbase_device *kbdev, u64 core_mask)
 bool kbase_csf_firmware_global_reinit_complete(struct kbase_device *kbdev)
 {
 	lockdep_assert_held(&kbdev->hwaccess_lock);
-#ifndef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
 	WARN_ON(!kbdev->csf.glb_init_request_pending);
-#endif
 
 	if (global_request_complete(kbdev, CSF_GLB_REQ_CFG_MASK))
 		kbdev->csf.glb_init_request_pending = false;
@@ -1935,12 +1924,6 @@ static void kbase_csf_firmware_reload_worker(struct work_struct *work)
 	err = kbasep_platform_fw_config_init(kbdev);
 	if (WARN_ON(err))
 		return;
-
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	err = kbase_csf_firmware_cfg_enable_host_ctrl_sc_rails(kbdev);
-	if (WARN_ON(err))
-		return;
-#endif
 
 	err = kbase_csf_firmware_cfg_fw_wa_enable(kbdev);
 	if (WARN_ON(err))
@@ -2052,11 +2035,7 @@ u32 kbase_csf_firmware_set_gpu_idle_hysteresis_time(struct kbase_device *kbdev, 
 	unsigned long flags;
 	u32 no_modifier = 0;
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	const u32 hysteresis_val = convert_dur_to_idle_count(kbdev, MALI_HOST_CONTROLS_SC_RAILS_IDLE_TIMER_NS, &no_modifier);
-#else
 	const u32 hysteresis_val = convert_dur_to_idle_count(kbdev, dur_ns, &no_modifier);
-#endif
 
 	/* The 'fw_load_lock' is taken to synchronize against the deferred
 	 * loading of FW, where the idle timer will be enabled.
@@ -2089,7 +2068,6 @@ u32 kbase_csf_firmware_set_gpu_idle_hysteresis_time(struct kbase_device *kbdev, 
 		return kbdev->csf.gpu_idle_dur_count;
 	}
 
-#ifndef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
 	/* The 'reg_lock' is also taken and is held till the update is not
 	 * complete, to ensure the update of idle timer value by multiple Users
 	 * gets serialized.
@@ -2098,43 +2076,24 @@ u32 kbase_csf_firmware_set_gpu_idle_hysteresis_time(struct kbase_device *kbdev, 
 	/* The firmware only reads the new idle timer value when the timer is
 	 * disabled.
 	 */
-#endif
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	kbase_csf_scheduler_lock(kbdev);
-	if (kbdev->csf.scheduler.gpu_idle_fw_timer_enabled) {
-#endif
-		/* The firmware only reads the new idle timer value when the timer is
-		 * disabled.
-		 */
-		kbase_csf_scheduler_spin_lock(kbdev, &flags);
-		kbase_csf_firmware_disable_gpu_idle_timer(kbdev);
-		kbase_csf_scheduler_spin_unlock(kbdev, flags);
-		/* Ensure that the request has taken effect */
-		wait_for_global_request(kbdev, GLB_REQ_IDLE_DISABLE_MASK);
+	/* The firmware only reads the new idle timer value when the timer is
+	 * disabled.
+	 */
+	kbase_csf_scheduler_spin_lock(kbdev, &flags);
+	kbase_csf_firmware_disable_gpu_idle_timer(kbdev);
+	kbase_csf_scheduler_spin_unlock(kbdev, flags);
+	/* Ensure that the request has taken effect */
+	wait_for_global_request(kbdev, GLB_REQ_IDLE_DISABLE_MASK);
 
-		kbase_csf_scheduler_spin_lock(kbdev, &flags);
-		kbdev->csf.gpu_idle_hysteresis_ns = dur_ns;
-		kbdev->csf.gpu_idle_dur_count = hysteresis_val;
-		kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
-		kbase_csf_firmware_enable_gpu_idle_timer(kbdev);
-		kbase_csf_scheduler_spin_unlock(kbdev, flags);
-		wait_for_global_request(kbdev, GLB_REQ_IDLE_ENABLE_MASK);
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	} else {
-		/* Record the new values. Would be used later when timer is
-		 * enabled
-		 */
-		kbase_csf_scheduler_spin_lock(kbdev, &flags);
-		kbdev->csf.gpu_idle_hysteresis_ns = dur_ns;
-		kbdev->csf.gpu_idle_dur_count = hysteresis_val;
-		kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
-		kbase_csf_scheduler_spin_unlock(kbdev, flags);
-	}
-	kbase_csf_scheduler_unlock(kbdev);
-#else
+	kbase_csf_scheduler_spin_lock(kbdev, &flags);
+	kbdev->csf.gpu_idle_hysteresis_ns = dur_ns;
+	kbdev->csf.gpu_idle_dur_count = hysteresis_val;
+	kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
+	kbase_csf_firmware_enable_gpu_idle_timer(kbdev);
+	kbase_csf_scheduler_spin_unlock(kbdev, flags);
+	wait_for_global_request(kbdev, GLB_REQ_IDLE_ENABLE_MASK);
 	mutex_unlock(&kbdev->csf.reg_lock);
-#endif
 
 	dev_dbg(kbdev->dev, "GPU suspend timeout updated: 0x%lld ns (0x%.8x)",
 		kbdev->csf.gpu_idle_hysteresis_ns,
@@ -2324,17 +2283,10 @@ int kbase_csf_firmware_early_init(struct kbase_device *kbdev)
 
 	init_waitqueue_head(&kbdev->csf.event_wait);
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	/* Set to the lowest possible value for FW to immediately write
-	 * to the power off register to disable the cores.
-	 */
-	kbdev->csf.mcu_core_pwroff_dur_count = 1;
-#else
 	kbdev->csf.mcu_core_pwroff_dur_ns = DEFAULT_GLB_PWROFF_TIMEOUT_NS;
 	kbdev->csf.mcu_core_pwroff_dur_count = convert_dur_to_core_pwroff_count(
 		kbdev, DEFAULT_GLB_PWROFF_TIMEOUT_NS, &no_modifier);
 	kbdev->csf.mcu_core_pwroff_dur_count_no_modifier = no_modifier;
-#endif
 
 	kbase_csf_firmware_reset_mcu_core_pwroff_time(kbdev);
 	INIT_LIST_HEAD(&kbdev->csf.firmware_interfaces);
@@ -2375,15 +2327,6 @@ int kbase_csf_firmware_late_init(struct kbase_device *kbdev)
 #endif
 	WARN_ON(!kbdev->csf.gpu_idle_hysteresis_ns);
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	kbdev->csf.gpu_idle_dur_count = convert_dur_to_idle_count(
-		kbdev, MALI_HOST_CONTROLS_SC_RAILS_IDLE_TIMER_NS, &no_modifier);
-
-	/* Set to the lowest possible value for FW to immediately write
-	 * to the power off register to disable the cores.
-	 */
-	kbdev->csf.mcu_core_pwroff_dur_count = 1;
-#else
 	kbdev->csf.gpu_idle_dur_count = convert_dur_to_idle_count(
 		kbdev, kbdev->csf.gpu_idle_hysteresis_ns, &no_modifier);
 	kbdev->csf.gpu_idle_dur_count_no_modifier = no_modifier;
@@ -2391,7 +2334,6 @@ int kbase_csf_firmware_late_init(struct kbase_device *kbdev)
 	kbdev->csf.mcu_core_pwroff_dur_count = convert_dur_to_core_pwroff_count(
 		kbdev, DEFAULT_GLB_PWROFF_TIMEOUT_NS, &no_modifier);
 	kbdev->csf.mcu_core_pwroff_dur_count_no_modifier = no_modifier;
-#endif
 
 	return 0;
 }
@@ -2565,14 +2507,6 @@ int kbase_csf_firmware_load_init(struct kbase_device *kbdev)
 		dev_err(kbdev->dev, "Failed to perform platform specific FW configuration");
 		goto err_out;
 	}
-
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	ret = kbase_csf_firmware_cfg_enable_host_ctrl_sc_rails(kbdev);
-	if (ret != 0) {
-		dev_err(kbdev->dev, "Failed to enable SC PM WA");
-		goto error;
-	}
-#endif
 
 	ret = kbase_csf_firmware_cfg_fw_wa_init(kbdev);
 	if (ret != 0) {

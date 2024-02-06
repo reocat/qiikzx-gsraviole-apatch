@@ -1985,13 +1985,6 @@ static void kbase_queue_oom_event(struct kbase_queue *const queue)
 
 	kbase_csf_scheduler_lock(kbdev);
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	if (kbdev->csf.scheduler.sc_power_rails_off) {
-		dev_warn(kctx->kbdev->dev, "SC power rails off unexpectedly when handling OoM event");
-		goto unlock;
-	}
-#endif
-
 	slot_num = kbase_csf_scheduler_group_get_slot(group);
 
 	/* The group could have gone off slot before this work item got
@@ -3030,17 +3023,9 @@ void kbase_csf_interrupt(struct kbase_device *kbdev, u32 val)
 				/* Handle IDLE Hysteresis notification event */
 				if ((glb_req ^ glb_ack) & GLB_REQ_IDLE_EVENT_MASK) {
 					dev_dbg(kbdev->dev, "Idle-hysteresis event flagged");
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-					if (kbase_csf_scheduler_process_gpu_idle_event(kbdev)) {
-						kbase_csf_firmware_global_input_mask(
-							global_iface, GLB_REQ, glb_ack,
-							GLB_REQ_IDLE_EVENT_MASK);
-					}
-#else
 					kbase_csf_firmware_global_input_mask(
 							global_iface, GLB_REQ, glb_ack,
 							GLB_REQ_IDLE_EVENT_MASK);
-#endif
 
 					glb_idle_irq_received = true;
 					/* Defer handling this IRQ to account for a race condition

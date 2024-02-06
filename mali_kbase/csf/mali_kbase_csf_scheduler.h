@@ -653,17 +653,4 @@ void kbase_csf_scheduler_force_wakeup(struct kbase_device *kbdev);
 void kbase_csf_scheduler_force_sleep(struct kbase_device *kbdev);
 #endif
 
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-/**
- * turn_on_sc_power_rails - Turn on the shader core power rails.
- *
- * @kbdev: Pointer to the device.
- *
- * This function is called to synchronously turn on the shader core power rails,
- * before execution is resumed on the cores.
- *
- * scheduler lock must be held when calling this function
- */
-void turn_on_sc_power_rails(struct kbase_device *kbdev);
-#endif
 #endif /* _KBASE_CSF_SCHEDULER_H_ */

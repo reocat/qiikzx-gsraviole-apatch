@@ -49,7 +49,6 @@
 #define KBASEP_TICK_PROTM_PEND_SCAN_SEQ_NR_INVALID (U32_MAX)
 
 /* 60ms optimizes power while minimizing latency impact for UI test cases. */
-#define MALI_HOST_CONTROLS_SC_RAILS_IDLE_TIMER_NS (600 * 1000)
 #define FIRMWARE_IDLE_HYSTERESIS_TIME_NS (60 * 1000 * 1000) /* Default 60 milliseconds */
 
 /* Idle hysteresis time can be scaled down when GPU sleep feature is used */
