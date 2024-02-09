@@ -66,16 +66,20 @@ cc_defaults {
     shared_libs: ["libfdt"],
 
     stl: "none",
-    dist: {
-        targets: [
-            "dist_files",
-        ],
-        dir: "dtc",
+    target: {
+        host: {
+            dist: {
+                targets: [
+                    "dist_files",
+                ],
+                dir: "dtc",
+            },
+        },
     },
 }
 
-cc_binary_host {
-    name: "dtc",
+cc_defaults {
+    name: "dtc_defaults",
     defaults: ["dt_defaults"],
     srcs: [
         "checks.c",
@@ -90,6 +94,18 @@ cc_binary_host {
         "treesource.c",
         "util.c",
     ],
+}
+
+cc_binary {
+    name: "dtc_static",
+    defaults: ["dtc_defaults"],
+    static_executable: true,
+    installable: false, // test only
+}
+
+cc_binary_host {
+    name: "dtc",
+    defaults: ["dtc_defaults"],
 }
 
 cc_binary_host {
