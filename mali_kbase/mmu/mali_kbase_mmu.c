@@ -2907,8 +2907,7 @@ static int kbase_mmu_teardown_pgd_pages(struct kbase_device *kbdev, struct kbase
 		phys_addr_t pgd = mmut->pgd;
 		struct page *p = phys_to_page(pgd);
 
-		if (count > nr)
-			count = nr;
+		count = MIN(nr, count);
 
 		/* need to check if this is a 2MB page or a small page */
 		for (level = MIDGARD_MMU_TOPLEVEL; level <= MIDGARD_MMU_BOTTOMLEVEL; level++) {
@@ -2919,23 +2918,12 @@ static int kbase_mmu_teardown_pgd_pages(struct kbase_device *kbdev, struct kbase
 			if (mmu_mode->ate_is_valid(page[index], level))
 				break; /* keep the mapping */
 			else if (!mmu_mode->pte_is_valid(page[index], level)) {
-				/* nothing here, advance */
-				switch (level) {
-				case MIDGARD_MMU_LEVEL(0):
-					count = 134217728;
-					break;
-				case MIDGARD_MMU_LEVEL(1):
-					count = 262144;
-					break;
-				case MIDGARD_MMU_LEVEL(2):
-					count = 512;
-					break;
-				case MIDGARD_MMU_LEVEL(3):
-					count = 1;
-					break;
-				}
-				if (count > nr)
-					count = nr;
+				dev_warn(kbdev->dev, "Invalid PTE found @ level %d for VA %llx",
+					 level, vpfn << PAGE_SHIFT);
+				/* nothing here, advance to the next PTE of the current level */
+				count = (1 << ((3 - level) * 9));
+				count -= (vpfn & (count - 1));
+				count = MIN(nr, count);
 				goto next;
 			}
 			next_pgd = mmu_mode->pte_to_phy_addr(
