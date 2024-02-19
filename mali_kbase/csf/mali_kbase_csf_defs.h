@@ -1092,21 +1092,6 @@ struct kbase_csf_mcu_shared_regions {
  *                          protected mode execution compared to other such
  *                          groups. It is updated on every tick/tock.
  *                          @interrupt_lock is used to serialize the access.
- * @sc_rails_off_work:      Work item enqueued on GPU idle notification to
- *                          turn off the shader core power rails.
- * @sc_power_rails_off:     Flag to keep a track of the status of shader core
- *                          power rails, set to true when power rails are
- *                          turned off.
- * @gpu_idle_work_pending:  Flag to indicate that the power down of GPU is
- *                          pending and it is set after turning off the
- *                          shader core power rails. The power down is skipped
- *                          if the flag is cleared. @lock is used to serialize
- *                          the access. Scheduling actions are skipped whilst
- *                          this flag is set.
- * @gpu_idle_fw_timer_enabled: Flag to keep a track if GPU idle event reporting
- *                             is disabled on FW side. It is set for the power
- *                             policy where the power managment of shader cores
- *                             needs to be done by the Host.
  * @csg_scan_sched_count:   Scheduling action counter used to assign the sched_act_seq_num
  *                          for each group added to Scheduler's schedulable list in a
  *                          tick/tock.
@@ -1151,11 +1136,7 @@ struct kbase_csf_scheduler {
 	struct kbase_context *top_kctx;
 	struct kbase_queue_group *top_grp;
 	struct kbase_queue_group *active_protm_grp;
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	struct delayed_work gpu_idle_work;
-#else
 	struct work_struct gpu_idle_work;
-#endif
 	struct workqueue_struct *idle_wq;
 	bool fast_gpu_idle_handling;
 	atomic_t gpu_no_longer_idle;
@@ -1164,12 +1145,6 @@ struct kbase_csf_scheduler {
 	u32 pm_active_count;
 	unsigned int csg_scheduling_period_ms;
 	u32 tick_protm_pending_seq;
-#ifdef CONFIG_MALI_HOST_CONTROLS_SC_RAILS
-	struct work_struct sc_rails_off_work;
-	bool sc_power_rails_off;
-	bool gpu_idle_work_pending;
-	bool gpu_idle_fw_timer_enabled;
-#endif
 	u32 csg_scan_sched_count;
 	ktime_t protm_enter_time;
 	struct kbase_csf_sched_heap_reclaim_mgr reclaim_mgr;
