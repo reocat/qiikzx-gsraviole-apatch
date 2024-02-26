@@ -476,7 +476,6 @@ static int cmd_device_enable(struct lwis_client *lwis_client, struct lwis_cmd_pk
 	lwis_dev->enabled++;
 	lwis_client->is_enabled = true;
 	lwis_dev->is_suspended = false;
-	dev_info(lwis_dev->dev, "Device enabled\n");
 exit_locked:
 	mutex_unlock(&lwis_dev->client_lock);
 	header->ret_code = ret;
