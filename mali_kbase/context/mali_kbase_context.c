@@ -46,7 +46,8 @@
 
 static void kbase_kprcs_release(struct kobject *kobj)
 {
-	// Nothing to release
+	struct kbase_process *kprcs = to_kprcs(kobj);
+	kfree(kprcs);
 }
 
 static ssize_t total_gpu_mem_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
@@ -315,7 +316,8 @@ static void kbase_remove_kctx_from_process(struct kbase_context *kctx)
 		WARN_ON(!RB_EMPTY_ROOT(&kprcs->dma_buf_root));
 		kobject_del(&kprcs->kobj);
 		kobject_put(&kprcs->kobj);
-		kfree(kprcs);
+		// kfree(kprcs); -> done in kobject release callback, left here
+		// for easy tracking of differences from upstream.
 	}
 }
 
