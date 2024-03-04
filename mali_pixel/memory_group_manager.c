@@ -27,9 +27,9 @@
 
 #include <uapi/gpu/arm/midgard/platform/pixel/pixel_memory_group_manager.h>
 
-
+#define NUM_PAGES_IN_2MB_LARGE_PAGE (SZ_2M / PAGE_SIZE)
 #define ORDER_SMALL_PAGE 0
-#define ORDER_LARGE_PAGE 9
+#define ORDER_LARGE_PAGE const_ilog2(NUM_PAGES_IN_2MB_LARGE_PAGE)
 
 /* Borr does not have "real" PBHA support. However, since we only use a 36-bit PA on the bus,
  * AxADDR[39:36] is wired up to the GPU AxUSER[PBHA] field seen by the rest of the system.
