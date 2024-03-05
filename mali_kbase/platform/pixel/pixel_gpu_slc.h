@@ -22,6 +22,8 @@ void gpu_slc_kctx_term(struct kbase_context *kctx);
 void gpu_slc_kctx_active(struct kbase_context *kctx);
 
 void gpu_slc_kctx_idle(struct kbase_context *kctx);
+
+void gpu_slc_tick_tock(struct kbase_device *kbdev);
 #else
 static int __maybe_unused gpu_pixel_handle_buffer_liveness_update_ioctl(struct kbase_context* kctx,
                                                   struct kbase_ioctl_buffer_liveness_update* update)
@@ -40,6 +42,8 @@ static void __maybe_unused gpu_slc_kctx_term(struct kbase_context* kctx) { (void
 static void __maybe_unused  gpu_slc_kctx_active(struct kbase_context *kctx) { (void)kctx; }
 
 static void __maybe_unused gpu_slc_kctx_idle(struct kbase_context *kctx) { (void)kctx; }
+
+static void __maybe_unused gpu_slc_tick_tock(struct kbase_device *kbdev) { (void)kbdev; }
 #endif /* CONFIG_MALI_PIXEL_GPU_SLC */
 
 #endif /* _PIXEL_GPU_SLC_H_ */
