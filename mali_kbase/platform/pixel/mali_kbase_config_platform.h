@@ -307,6 +307,7 @@ struct gpu_dvfs_metrics_uid_stats;
  * @itmon.nb:     The ITMON notifier block.
  * @itmon.pa:     The faulting physical address.
  * @itmon.active: Active count, non-zero while a search is active.
+ * @slc_demand:   Tracks demand for SLC space
  */
 struct pixel_context {
 	struct kbase_device *kbdev;
@@ -423,19 +424,26 @@ struct pixel_context {
 		atomic_t active;
 	} itmon;
 #endif
+#ifndef PIXEL_GPU_SLC_ACPM_SIGNAL
+	atomic_t slc_demand;
+#endif /* PIXEL_GPU_SLC_ACPM_SIGNAL */
 };
 
 /**
  * struct pixel_platform_data - Per kbase_context Pixel specific platform data
  *
- * @kctx:     Handle to the parent kctx
- * @stats:    Tracks the dvfs metrics for the UID associated with this context
- * @slc_vote: Tracks whether this context is voting for slc
+ * @kctx:       Handle to the parent kctx
+ * @stats:      Tracks the dvfs metrics for the UID associated with this context
+ * @slc_vote:   Tracks whether this context is voting for slc
+ * @slc_demand: Tracks demand for SLC space
  */
 struct pixel_platform_data {
 	struct kbase_context *kctx;
 	struct gpu_dvfs_metrics_uid_stats* stats;
 	int slc_vote;
+#ifndef PIXEL_GPU_SLC_ACPM_SIGNAL
+	atomic_t slc_demand;
+#endif /* PIXEL_GPU_SLC_ACPM_SIGNAL */
 };
 
 #endif /* _KBASE_CONFIG_PLATFORM_H_ */
