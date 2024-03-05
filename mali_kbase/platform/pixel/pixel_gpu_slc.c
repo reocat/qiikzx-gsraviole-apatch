@@ -308,6 +308,30 @@ static void gpu_slc_liveness_update(struct kbase_context* kctx,
 	gpu_slc_unlock_as(kctx);
 }
 
+static void gpu_slc_kctx_idle_worker(struct work_struct *work)
+{
+	struct pixel_platform_data *pd =
+		container_of(work, struct pixel_platform_data, slc.idle_work);
+	struct kbase_context *kctx = pd->kctx;
+	struct kbase_device *kbdev = kctx->kbdev;
+	struct pixel_context *pc = kbdev->platform_context;
+
+	if (atomic_read(&pd->slc.idle_work_cancelled))
+		return;
+
+	mutex_lock(&pc->slc.lock);
+
+	pc->slc.demand -= pd->slc.peak_demand;
+	pc->slc.usage -= pd->slc.peak_usage;
+
+	pd->slc.peak_demand = 0;
+	pd->slc.peak_usage = 0;
+
+	gpu_slc_resize_partition(kctx->kbdev);
+
+	mutex_unlock(&pc->slc.lock);
+}
+
 /**
  * gpu_pixel_handle_buffer_liveness_update_ioctl() - See gpu_slc_liveness_update
  *
@@ -409,7 +433,10 @@ done:
  */
 int gpu_slc_kctx_init(struct kbase_context *kctx)
 {
-	(void)kctx;
+	struct pixel_platform_data *pd = kctx->platform_data;
+
+	INIT_WORK(&pd->slc.idle_work, gpu_slc_kctx_idle_worker);
+
 	return 0;
 }
 
@@ -422,9 +449,12 @@ int gpu_slc_kctx_init(struct kbase_context *kctx)
  */
 void gpu_slc_kctx_term(struct kbase_context *kctx)
 {
-	struct kbase_device* kbdev = kctx->kbdev;
+	struct kbase_device *kbdev = kctx->kbdev;
 	struct pixel_context *pc = kbdev->platform_context;
 	struct pixel_platform_data *kctx_pd = kctx->platform_data;
+
+	atomic_set(&kctx_pd->slc.idle_work_cancelled, 1);
+	cancel_work_sync(&kctx_pd->slc.idle_work);
 
 	mutex_lock(&pc->slc.lock);
 
@@ -438,6 +468,48 @@ void gpu_slc_kctx_term(struct kbase_context *kctx)
 	mutex_unlock(&pc->slc.lock);
 }
 
+/**
+ * gpu_slc_kctx_active() - Called when a kernel context is (re)activated
+ *
+ * @kctx: The &struct kbase_context that is now active
+ */
+void gpu_slc_kctx_active(struct kbase_context *kctx)
+{
+	struct kbase_device *kbdev = kctx->kbdev;
+	struct pixel_platform_data *pd = kctx->platform_data;
+
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
+	/* Asynchronously cancel the idle work, since we're in atomic context.
+	 * The goal here is not to ensure that the idle_work doesn't run. Instead we need to ensure
+	 * that any  queued idle_work does not run *after* a liveness update for the now active kctx.
+	 * Either the idle_work is executing now, and beats the cancellation check, or it runs later
+	 * and early-exits at the cancellation check.
+	 * In neither scenario will a 'cancelled' idle_work interfere with a later liveness update.
+	 */
+	atomic_set(&pd->slc.idle_work_cancelled, 1);
+}
+
+/**
+ * gpu_slc_kctx_idle() - Called when a kernel context is idled
+ *
+ * @kctx: The &struct kbase_context that is now idle
+ */
+void gpu_slc_kctx_idle(struct kbase_context *kctx)
+{
+	struct kbase_device *kbdev = kctx->kbdev;
+	struct pixel_platform_data *pd = kctx->platform_data;
+
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
+	/* In the event that this line 'un-cancels' the idle_work, and that idle_work is executing,
+	 * we will re-queue on the following line anyway, resulting in a unnecessary additional
+	 * execution of the worker.
+	 * While not optimal, it won't result in a correctness problem.
+	 */
+	atomic_set(&pd->slc.idle_work_cancelled, 0);
+	queue_work(system_highpri_wq, &pd->slc.idle_work);
+}
 
 /**
  * gpu_slc_init - Initialize the SLC partition for the GPU
