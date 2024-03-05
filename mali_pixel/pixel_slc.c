@@ -56,7 +56,8 @@ static bool partition_required(struct slc_partition *pt)
 {
 	lockdep_assert_held(&pt->lock);
 
-	return atomic_read(&pt->refcount) && (pt->signal >= PARTITION_ENABLE_THRESHOLD);
+	return (atomic_read(&pt->refcount) && (pt->signal >= PARTITION_ENABLE_THRESHOLD)) ||
+	       pt->pinned;
 }
 
 /**
@@ -251,6 +252,22 @@ void slc_update_signal(struct slc_data *data, u64 signal)
 	spin_unlock_irqrestore(&pt->lock, flags);
 }
 
+void slc_pin(struct slc_data *data, bool pin)
+{
+	struct slc_partition *pt = &data->partition;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pt->lock, flags);
+
+	pt->pinned = pin;
+	if (pin)
+		enable_partition(data, pt);
+	else if (!partition_required(pt))
+		queue_disable_worker(data);
+
+	spin_unlock_irqrestore(&pt->lock, flags);
+}
+
 /**
  * init_partition - Register and initialize a partition with the SLC driver.
  *
@@ -291,6 +308,7 @@ static int init_partition(struct slc_data *data, struct slc_partition *pt, u32 i
 		.enabled = false,
 		.refcount = ATOMIC_INIT(0),
 		.signal = 0,
+		.pinned = false,
 	};
 	spin_lock_init(&pt->lock);
 

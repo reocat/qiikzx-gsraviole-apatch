@@ -254,6 +254,8 @@ extern struct kobject *pixel_stat_gpu_kobj;
 
 #define MGM_ATTR_RO(_name) \
 	static struct kobj_attribute _name##_attr = __ATTR_RO(_name)
+#define MGM_ATTR_WO(_name) \
+	static struct kobj_attribute _name##_attr = __ATTR_WO(_name)
 
 static ssize_t total_page_count_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *buf)
@@ -296,10 +298,31 @@ static ssize_t large_page_count_show(struct kobject *kobj,
 }
 MGM_ATTR_RO(large_page_count);
 
+static ssize_t slc_pin_partition_store(struct kobject* kobj,
+                                       struct kobj_attribute* attr,
+                                       const char* buf,
+                                       size_t count)
+{
+	struct mgm_groups *data = container_of(kobj, struct mgm_groups, kobj);
+	bool pin;
+
+	if (!data)
+		return -ENODEV;
+
+	if (kstrtobool(buf, &pin))
+		return -EINVAL;
+
+	slc_pin(&data->slc_data, pin);
+
+	return count;
+}
+MGM_ATTR_WO(slc_pin_partition);
+
 static struct attribute *mgm_attrs[] = {
 	&total_page_count_attr.attr,
 	&small_page_count_attr.attr,
 	&large_page_count_attr.attr,
+	&slc_pin_partition_attr.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(mgm);
