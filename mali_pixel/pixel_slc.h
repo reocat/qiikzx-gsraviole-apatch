@@ -45,6 +45,12 @@ struct slc_partition {
 
 	/** @enabled: Is the partition currently enabled */
 	bool enabled;
+
+	/** @refcount: Reference count for this partition */
+	atomic_t refcount;
+
+	/** @lock: Lock protecting enable/disable ops on this partition */
+	spinlock_t lock;
 };
 
 /**
@@ -59,6 +65,9 @@ struct slc_data {
 
 	/** @dev: Inherited pointer to device attached */
 	struct device *dev;
+
+	/** @disable_work: Work item used to queue lazy SLC partition disable ops. */
+	struct delayed_work disable_work;
 };
 
 int slc_init_data(struct slc_data *data, struct device* dev);
@@ -68,5 +77,9 @@ void slc_term_data(struct slc_data *data);
 u64 slc_set_pbha(struct slc_data const *data, u64 pte);
 
 u64 slc_wipe_pbha(u64 pte);
+
+void slc_inc_refcount(struct slc_data *data);
+
+void slc_dec_refcount(struct slc_data *data);
 
 #endif /* _PIXEL_SLC_H_ */

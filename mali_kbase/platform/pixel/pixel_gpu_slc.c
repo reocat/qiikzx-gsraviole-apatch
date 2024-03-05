@@ -17,6 +17,37 @@
 #include "mali_kbase_config_platform.h"
 #include "pixel_gpu_slc.h"
 
+#include <uapi/gpu/arm/midgard/platform/pixel/pixel_memory_group_manager.h>
+
+/**
+ * enum slc_vote_state - Whether a context is voting for SLC
+ */
+enum slc_vote_state {
+	/** @IDLE: Idle, not voting for SLC */
+	IDLE   = 0,
+	/** @VOTING: Active, voting for SLC */
+	VOTING = 1,
+};
+
+/**
+ * transition() - Try to transition from one value to another
+ *
+ * @v:   Value to transition
+ * @old: Starting state to transition from
+ * @new: Destination state to transition to
+ *
+ * Return: Whether the transition was successful
+ */
+static bool transition(int *v, int old, int new)
+{
+	bool const cond = *v == old;
+
+	if (cond)
+		*v = new;
+
+	return cond;
+}
+
 /**
  * gpu_pixel_handle_buffer_liveness_update_ioctl() - See gpu_slc_liveness_update
  *
@@ -57,7 +88,11 @@ int gpu_slc_kctx_init(struct kbase_context *kctx)
  */
 void gpu_slc_kctx_term(struct kbase_context *kctx)
 {
-	(void)kctx;
+	struct pixel_platform_data *pd = kctx->platform_data;
+
+	/* Contexts can be terminated without being idled first */
+	if (transition(&pd->slc_vote, VOTING, IDLE))
+		pixel_mgm_slc_dec_refcount(kctx->kbdev->mgm_dev);
 }
 
 /**
@@ -67,7 +102,12 @@ void gpu_slc_kctx_term(struct kbase_context *kctx)
  */
 void gpu_slc_kctx_active(struct kbase_context *kctx)
 {
-	(void)kctx;
+	struct pixel_platform_data *pd = kctx->platform_data;
+
+	lockdep_assert_held(&kctx->kbdev->hwaccess_lock);
+
+	if (transition(&pd->slc_vote, IDLE, VOTING))
+		pixel_mgm_slc_inc_refcount(kctx->kbdev->mgm_dev);
 }
 
 /**
@@ -77,7 +117,12 @@ void gpu_slc_kctx_active(struct kbase_context *kctx)
  */
 void gpu_slc_kctx_idle(struct kbase_context *kctx)
 {
-	(void)kctx;
+	struct pixel_platform_data *pd = kctx->platform_data;
+
+	lockdep_assert_held(&kctx->kbdev->hwaccess_lock);
+
+	if (transition(&pd->slc_vote, VOTING, IDLE))
+		pixel_mgm_slc_dec_refcount(kctx->kbdev->mgm_dev);
 }
 
 /**
