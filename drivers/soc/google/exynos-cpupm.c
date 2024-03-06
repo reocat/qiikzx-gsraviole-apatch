@@ -50,21 +50,6 @@ enum {
 /* Length of power mode name */
 #define NAME_LEN	32
 
-/* CPUPM statistics */
-struct cpupm_stats {
-	/* count of power mode entry */
-	unsigned int entry_count;
-
-	/* count of power mode entry cancllations */
-	unsigned int cancel_count;
-
-	/* power mode residency time */
-	s64 residency_time;
-
-	/* time entered power mode */
-	ktime_t entry_time;
-};
-
 struct wakeup_mask {
 	int mask_reg_offset;
 	int stat_reg_offset;
@@ -126,10 +111,6 @@ struct power_mode {
 
 	/* list of power mode */
 	struct list_head	list;
-
-	/* CPUPM statistics */
-	struct cpupm_stats	stat;
-	struct cpupm_stats	stat_snapshot;
 };
 
 static LIST_HEAD(mode_list);
@@ -143,11 +124,6 @@ struct exynos_cpupm {
 	/* cpu state, BUSY or IDLE */
 	int			state;
 	ktime_t			next_hrtimer;
-
-	/* CPU statistics */
-	struct cpupm_stats	stat[CPUIDLE_STATE_MAX];
-	struct cpupm_stats	stat_snapshot[CPUIDLE_STATE_MAX];
-	int			entered_state;
 
 	/* array to manage the power mode that contains the cpu */
 	struct power_mode	*modes[POWERMODE_TYPE_END];
@@ -220,10 +196,6 @@ struct idle_ip {
 	/* ip idle state, 0:busy, 1:idle */
 	unsigned int		idle;
 
-	/* busy count for cpuidle-profiler */
-	unsigned int		busy_count;
-	unsigned int		busy_count_profile;
-
 	/* pmu offset for extern idle-ip */
 	unsigned int		pmu_offset;
 };
@@ -256,17 +228,12 @@ static bool __ip_busy(struct idle_ip *ip)
 	return false;
 }
 
-static void cpupm_profile_idle_ip(void);
-
 static bool ip_busy(void)
 {
 	struct idle_ip *ip;
 	unsigned long flags;
 
 	spin_lock_irqsave(&idle_ip_lock, flags);
-
-	cpupm_profile_idle_ip();
-
 	list_for_each_entry(ip, &ip_list, list) {
 		if (__ip_busy(ip)) {
 			spin_unlock_irqrestore(&idle_ip_lock, flags);
@@ -346,272 +313,12 @@ int exynos_get_idle_ip_index(const char *name)
 }
 EXPORT_SYMBOL_GPL(exynos_get_idle_ip_index);
 
-/******************************************************************************
- *                               CPUPM profiler                               *
- ******************************************************************************/
-static void cpuidle_profile_begin(struct cpupm_stats *stat)
-{
-	stat->entry_time = ktime_get();
-	stat->entry_count++;
-}
-
-static void cpuidle_profile_end(struct cpupm_stats *stat, int cancel)
-{
-	if (!stat->entry_time)
-		return;
-
-	if (cancel < 0) {
-		stat->cancel_count++;
-		return;
-	}
-
-	stat->residency_time +=
-		ktime_to_us(ktime_sub(ktime_get(), stat->entry_time));
-	stat->entry_time = 0;
-}
-
 static void vendor_hook_cpu_idle_enter(void *data, int *state, struct cpuidle_device *dev)
 {
 	struct exynos_cpupm *pm = per_cpu_ptr(cpupm, dev->cpu);
 
 	pm->next_hrtimer = dev->next_hrtimer;
-
-	pm->entered_state = *state;
-	cpuidle_profile_begin(&pm->stat[pm->entered_state]);
 }
-
-static void vendor_hook_cpu_idle_exit(void *data, int state, struct cpuidle_device *dev)
-{
-	struct exynos_cpupm *pm = per_cpu_ptr(cpupm, dev->cpu);
-
-	cpuidle_profile_end(&pm->stat[pm->entered_state], state);
-}
-
-static ktime_t cpupm_init_time;
-
-static void cpupm_profile_begin(struct cpupm_stats *stat)
-{
-	stat->entry_time = ktime_get();
-	stat->entry_count++;
-}
-
-static void cpupm_profile_end(struct cpupm_stats *stat, int cancel)
-{
-	if (!stat->entry_time)
-		return;
-
-	if (cancel) {
-		stat->cancel_count++;
-		return;
-	}
-
-	stat->residency_time +=
-		ktime_to_us(ktime_sub(ktime_get(), stat->entry_time));
-	stat->entry_time = 0;
-}
-
-static u32 idle_ip_check_count;
-static u32 idle_ip_check_count_profile;
-
-static void cpupm_profile_idle_ip(void)
-{
-	struct idle_ip *ip;
-
-	idle_ip_check_count++;
-
-	list_for_each_entry(ip, &ip_list, list)
-		if (__ip_busy(ip))
-			ip->busy_count++;
-}
-
-static int profiling;
-static ktime_t profile_time;
-
-static ssize_t profile_show(struct device *dev,
-			    struct device_attribute *attr,
-			    char *buf)
-{
-	struct exynos_cpupm *pm;
-	struct power_mode *mode;
-	struct idle_ip *ip;
-	s64 total;
-	int i, cpu, ret = 0;
-
-	if (profiling)
-		return snprintf(buf, PAGE_SIZE, "Profile is ongoing\n");
-
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"format : [mode] [entry_count] [cancel_count] [time] [(ratio)]\n\n");
-
-	total = ktime_to_us(profile_time);
-
-	for (i = 0; i <= cpuidle_state_max; i++) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret, "[state%d]\n", i);
-		for_each_possible_cpu(cpu) {
-			pm = per_cpu_ptr(cpupm, cpu);
-			ret += snprintf(buf + ret, PAGE_SIZE - ret,
-					"cpu%d %d %d %lld (%lld%%)\n",
-					cpu,
-					pm->stat_snapshot[i].entry_count,
-					pm->stat_snapshot[i].cancel_count,
-					pm->stat_snapshot[i].residency_time,
-					pm->stat_snapshot[i].residency_time * 100 / total);
-		}
-		ret += snprintf(buf + ret, PAGE_SIZE - ret, "\n");
-	}
-
-	list_for_each_entry(mode, &mode_list, list) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"%-7s %d %d %lld (%lld%%)\n",
-				mode->name,
-				mode->stat_snapshot.entry_count,
-				mode->stat_snapshot.cancel_count,
-				mode->stat_snapshot.residency_time,
-				mode->stat_snapshot.residency_time * 100 / total);
-	}
-
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"\nIDLE-IP statistics (E:Extern IP)\n");
-	list_for_each_entry(ip, &ip_list, list)
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"* %-20s: busy %d/%d %s\n",
-				ip->name, ip->busy_count_profile,
-				idle_ip_check_count_profile,
-				ip->type == EXTERN_IP ? "(E)" : "");
-	ret += snprintf(buf + ret, PAGE_SIZE - ret, "\n(total %lldus)\n", total);
-
-	return ret;
-}
-
-static ssize_t profile_store(struct device *dev,
-			     struct device_attribute *attr,
-			     const char *buf, size_t count)
-{
-	struct exynos_cpupm *pm;
-	struct power_mode *mode;
-	struct idle_ip *ip;
-	int input, cpu, i;
-
-	if (kstrtoint(buf, 0, &input))
-		return -EINVAL;
-
-	input = !!input;
-	if (profiling == input)
-		return count;
-
-	profiling = input;
-
-	if (!input)
-		goto stop_profile;
-
-	preempt_disable();
-	smp_call_function(do_nothing, NULL, 1);
-	preempt_enable();
-
-	for_each_possible_cpu(cpu) {
-		pm = per_cpu_ptr(cpupm, cpu);
-		for (i = 0; i <= cpuidle_state_max; i++)
-			pm->stat_snapshot[i] = pm->stat[i];
-	}
-
-	list_for_each_entry(mode, &mode_list, list)
-		mode->stat_snapshot = mode->stat;
-
-	list_for_each_entry(ip, &ip_list, list)
-		ip->busy_count_profile = ip->busy_count;
-
-	profile_time = ktime_get();
-	idle_ip_check_count_profile = idle_ip_check_count;
-
-	return count;
-
-stop_profile:
-#define delta(a, b)	(a = (b) - a)
-#define field_delta(field)				\
-	delta(mode->stat_snapshot.field, mode->stat.field)
-#define state_delta(field)				\
-	for (i = 0; i <= cpuidle_state_max; i++)	\
-		delta(pm->stat_snapshot[i].field, pm->stat[i].field)
-
-	preempt_disable();
-	smp_call_function(do_nothing, NULL, 1);
-	preempt_enable();
-
-	for_each_possible_cpu(cpu) {
-		pm = per_cpu_ptr(cpupm, cpu);
-		state_delta(entry_count);
-		state_delta(cancel_count);
-		state_delta(residency_time);
-	}
-
-	list_for_each_entry(mode, &mode_list, list) {
-		field_delta(entry_count);
-		field_delta(cancel_count);
-		field_delta(residency_time);
-	}
-
-	list_for_each_entry(ip, &ip_list, list)
-		ip->busy_count_profile = ip->busy_count - ip->busy_count_profile;
-
-	profile_time = ktime_sub(ktime_get(), profile_time);
-	idle_ip_check_count_profile = idle_ip_check_count - idle_ip_check_count_profile;
-
-	return count;
-}
-
-static ssize_t time_in_state_show(struct device *dev,
-				  struct device_attribute *attr,
-				  char *buf)
-{
-	struct exynos_cpupm *pm;
-	struct power_mode *mode;
-	struct idle_ip *ip;
-	s64 total = ktime_to_us(ktime_sub(ktime_get(), cpupm_init_time));
-	int i, cpu, ret = 0;
-
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"format : [mode] [entry_count] [cancel_count] [time] [(ratio)]\n\n");
-
-	for (i = 0; i <= cpuidle_state_max; i++) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret, "[state%d]\n", i);
-		for_each_possible_cpu(cpu) {
-			pm = per_cpu_ptr(cpupm, cpu);
-			ret += snprintf(buf + ret, PAGE_SIZE - ret,
-					"cpu%d %d %d %lld (%lld%%)\n",
-					cpu,
-					pm->stat[i].entry_count,
-					pm->stat[i].cancel_count,
-					pm->stat[i].residency_time,
-					pm->stat[i].residency_time * 100 / total);
-		}
-		ret += snprintf(buf + ret, PAGE_SIZE - ret, "\n");
-	}
-
-	list_for_each_entry(mode, &mode_list, list) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"%-7s %d %d %lld (%lld%%)\n",
-				mode->name,
-				mode->stat.entry_count,
-				mode->stat.cancel_count,
-				mode->stat.residency_time,
-				mode->stat.residency_time * 100 / total);
-	}
-
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"\nIDLE-IP statistics (E:Extern IP)\n");
-	list_for_each_entry(ip, &ip_list, list)
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"* %-20s: busy %d/%d %s\n",
-				ip->name, ip->busy_count,
-				idle_ip_check_count,
-				ip->type == EXTERN_IP ? "(E)" : "");
-	ret += snprintf(buf + ret, PAGE_SIZE - ret, "\n(total %lldus)\n", total);
-
-	return ret;
-}
-
-static DEVICE_ATTR_RO(time_in_state);
-static DEVICE_ATTR_RW(profile);
 
 /******************************************************************************
  *                            CPU idle management                             *
@@ -865,14 +572,10 @@ static void enter_power_mode(int cpu, struct power_mode *mode)
 
 	dbg_snapshot_cpuidle_mod(mode->name, 0, 0, DSS_FLAG_IN);
 	set_state_idle(mode);
-
-	cpupm_profile_begin(&mode->stat);
 }
 
 static void exit_power_mode(int cpu, struct power_mode *mode, int cancel)
 {
-	cpupm_profile_end(&mode->stat, cancel);
-
 	/*
 	 * Configure settings to exit power mode. This is executed by the
 	 * first cpu exiting from power mode.
@@ -1026,25 +729,6 @@ static struct notifier_block exynos_cpupm_reboot_nb = {
 /******************************************************************************
  *                               sysfs interface                              *
  ******************************************************************************/
-static ssize_t idle_ip_show(struct device *dev,
-			    struct device_attribute *attr, char *buf)
-{
-	struct idle_ip *ip;
-	unsigned long flags;
-	int ret = 0;
-
-	spin_lock_irqsave(&idle_ip_lock, flags);
-
-	list_for_each_entry(ip, &ip_list, list)
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "[%d] %s %s\n",
-				 ip->index, ip->name,
-				 ip->type == EXTERN_IP ? "(E)" : "");
-
-	spin_unlock_irqrestore(&idle_ip_lock, flags);
-
-	return ret;
-}
-DEVICE_ATTR_RO(idle_ip);
 
 static ssize_t power_mode_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
@@ -1083,9 +767,6 @@ static ssize_t power_mode_store(struct device *dev,
 }
 
 static struct attribute *exynos_cpupm_attrs[] = {
-	&dev_attr_idle_ip.attr,
-	&dev_attr_time_in_state.attr,
-	&dev_attr_profile.attr,
 	NULL,
 };
 
@@ -1452,10 +1133,6 @@ static int exynos_cpupm_probe(struct platform_device *pdev)
 
 	ret = register_trace_android_vh_cpu_idle_enter(vendor_hook_cpu_idle_enter, NULL);
 	WARN_ON(ret);
-	ret = register_trace_android_vh_cpu_idle_exit(vendor_hook_cpu_idle_exit, NULL);
-	WARN_ON(ret);
-
-	cpupm_init_time = ktime_get();
 
 	return 0;
 }
