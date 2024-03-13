@@ -244,9 +244,6 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
-	/* Inform platform of scheduling event */
-	kbasep_platform_event_tick_tock(kbdev);
-
 	return HRTIMER_NORESTART;
 }
 

@@ -282,7 +282,6 @@ struct kbase_platform_funcs_conf platform_funcs = {
 	.platform_handler_work_end_func = &gpu_dvfs_metrics_work_end,
 	.platform_handler_context_active = &gpu_slc_kctx_active,
 	.platform_handler_context_idle = &gpu_slc_kctx_idle,
-	.platform_handler_tick_tock = &gpu_slc_tick_tock,
 	.platform_fw_cfg_init_func = &gpu_fw_cfg_init,
 	.platform_handler_core_dump_func = &gpu_sscd_dump,
 };

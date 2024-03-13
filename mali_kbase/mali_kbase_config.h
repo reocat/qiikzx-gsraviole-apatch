@@ -138,14 +138,6 @@ struct kbase_platform_funcs_conf {
 	 */
 	void (*platform_handler_context_idle)(struct kbase_context *kctx);
 	/**
-	 * platform_handler_tick_tock - Platform specific callback when a scheduler tick/tock occurs.
-	 *
-	 * @kbdev: kbase_device pointer
-	 *
-	 * Context: Process context
-	 */
-	void (*platform_handler_tick_tock)(struct kbase_device *kbdev);
-	/**
 	 * platform_handler_work_begin_func - Platform specific handler whose
 	 *                                    function changes depending on the
 	 *                                    backend used.
@@ -640,16 +632,6 @@ void kbasep_platform_event_work_begin(void *param);
  *
  */
 void kbasep_platform_event_work_end(void *param);
-
-/**
- * kbasep_platform_tick_tock - Platform specific callback when a scheduler tick/tock occurs.
- *
- * @kbdev: kbase_device pointer
- *
- * Function calls a platform defined routine if specified in the configuration attributes.
- *
- */
-void kbasep_platform_event_tick_tock(struct kbase_device *kbdev);
 
 /**
  * kbasep_platform_fw_config_init - Platform specific callback to configure FW
