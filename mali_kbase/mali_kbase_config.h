@@ -121,23 +121,6 @@ struct kbase_platform_funcs_conf {
 	 */
 	void (*platform_handler_context_term_func)(struct kbase_context *kctx);
 	/**
-	 * platform_handler_context_active - Platform specific handler, called when a context is
-	 *                                   (re)activated.
-	 *
-	 * @kctx:  kbase_context pointer
-	 *
-	 * Context: Atomic context
-	 */
-	void (*platform_handler_context_active)(struct kbase_context *kctx);
-	/**
-	 * platform_handler_context_idle - Platform specific handler, called when a context is idled.
-	 *
-	 * @kctx:  kbase_context pointer
-	 *
-	 * Context: Atomic context
-	 */
-	void (*platform_handler_context_idle)(struct kbase_context *kctx);
-	/**
 	 * platform_handler_work_begin_func - Platform specific handler whose
 	 *                                    function changes depending on the
 	 *                                    backend used.
@@ -580,25 +563,6 @@ int kbasep_platform_context_init(struct kbase_context *kctx);
  *
  */
 void kbasep_platform_context_term(struct kbase_context *kctx);
-
-/**
- * kbasep_platform_context_active - Platform specific callback, called when a context is
- *                                 (re)activated.
- *
- * @kctx:  kbase_context pointer
- *
- * Function calls a platform defined routine if specified in the configuration attributes.
- */
-void kbasep_platform_context_active(struct kbase_context *kctx);
-
-/**
- * kbasep_platform_context_idle - Platform specific callback, called when a context is idled.
- *
- * @kctx:  kbase_context pointer
- *
- * Function calls a platform defined routine if specified in the configuration attributes.
- */
-void kbasep_platform_context_idle(struct kbase_context *kctx);
 
 /**
  * kbasep_platform_event_work_begin - Platform specific callback whose function

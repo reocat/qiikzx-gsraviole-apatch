@@ -83,24 +83,6 @@ void kbasep_platform_context_term(struct kbase_context *kctx)
 		platform_funcs_p->platform_handler_context_term_func(kctx);
 }
 
-void kbasep_platform_context_active(struct kbase_context *kctx)
-{
-	struct kbase_platform_funcs_conf *platform_funcs_p;
-
-	platform_funcs_p = (struct kbase_platform_funcs_conf*)PLATFORM_FUNCS;
-	if (platform_funcs_p && platform_funcs_p->platform_handler_context_active)
-		platform_funcs_p->platform_handler_context_active(kctx);
-}
-
-void kbasep_platform_context_idle(struct kbase_context *kctx)
-{
-	struct kbase_platform_funcs_conf *platform_funcs_p;
-
-	platform_funcs_p = (struct kbase_platform_funcs_conf*)PLATFORM_FUNCS;
-	if (platform_funcs_p && platform_funcs_p->platform_handler_context_idle)
-		platform_funcs_p->platform_handler_context_idle(kctx);
-}
-
 void kbasep_platform_event_work_begin(void *param)
 {
 	struct kbase_platform_funcs_conf *platform_funcs_p;
