@@ -428,14 +428,12 @@ struct pixel_context {
 /**
  * struct pixel_platform_data - Per kbase_context Pixel specific platform data
  *
- * @kctx:     Handle to the parent kctx
- * @stats:    Tracks the dvfs metrics for the UID associated with this context
- * @slc_vote: Tracks whether this context is voting for slc
+ * @kctx:  Handle to the parent kctx
+ * @stats: Tracks the dvfs metrics for the UID associated with this context
  */
 struct pixel_platform_data {
 	struct kbase_context *kctx;
 	struct gpu_dvfs_metrics_uid_stats* stats;
-	int slc_vote;
 };
 
 #endif /* _KBASE_CONFIG_PLATFORM_H_ */

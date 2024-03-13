@@ -37,50 +37,6 @@
 #endif
 #define PBHA_BIT_MASK (0xf)
 
-#define PARTITION_DISABLE_HYSTERESIS (msecs_to_jiffies(100))
-
-
-/**
- * partition_required() - Determine whether we require a partition to be enabled
- *
- * @pt: The partition to check.
- *
- * Check whether a partition meets the requirements for being enabled.
- *
- * Return: True, if the partition is required to be enabled, otherwise false.
- */
-static bool partition_required(struct slc_partition *pt)
-{
-	lockdep_assert_held(&pt->lock);
-
-	return atomic_read(&pt->refcount);
-}
-
-/**
- * pixel_atomic_dec_and_lock_irqsave - lock on reaching reference count zero
- *
- * @val:   The atomic counter
- * @lock:  The spinlock in question
- * @flags: Storage for the current interrupt enable state
- *
- * Decrements @val by 1, if the result is 0, locks @lock.
- *
- * Return: True if the lock was taken, false for all other cases.
- */
-static int pixel_atomic_dec_and_lock_irqsave(atomic_t* val, spinlock_t* lock, unsigned long* flags)
-{
-	/* Subtract 1 from counter unless that drops it to 0 (ie. it was 1) */
-	if (atomic_add_unless(val, -1, 1))
-		return 0;
-
-	/* Otherwise do it the slow way */
-	spin_lock_irqsave(lock, *flags);
-	if (atomic_dec_and_test(val))
-		return 1;
-	spin_unlock_irqrestore(lock, *flags);
-
-	return 0;
-}
 
 /**
  * slc_wipe_pbha - Clear any set PBHA bits from the pte.
@@ -148,84 +104,6 @@ static void disable_partition(struct slc_data *data, struct slc_partition *pt)
 }
 
 /**
- * queue_disable_worker - Queue a delayed partition disable op
- *
- * @data: The &struct slc_data tracking partition information.
- */
-static void queue_disable_worker(struct slc_data *data)
-{
-	queue_delayed_work(system_highpri_wq, &data->disable_work, PARTITION_DISABLE_HYSTERESIS);
-}
-
-/**
- * partition_disable_worker - Callback to lazily disable a partition
- *
- * @work: The &struct work_struct dequeued
- */
-static void partition_disable_worker(struct work_struct *work)
-{
-	struct slc_data* data = container_of(work, struct slc_data, disable_work.work);
-	struct slc_partition *pt = &data->partition;
-	unsigned long flags;
-
-	/* Complete any pending disable ops */
-	spin_lock_irqsave(&pt->lock, flags);
-
-	if (!partition_required(pt))
-		disable_partition(data, pt);
-
-	spin_unlock_irqrestore(&pt->lock, flags);
-}
-
-/**
- * slc_inc_refcount - Increase the partition reference count.
- *
- * @data: The &struct slc_data tracking partition information.
- *
- * If this is the first reference being taken, the partition will be enabled.
- */
-void slc_inc_refcount(struct slc_data *data)
-{
-	struct slc_partition *pt = &data->partition;
-
-	/* Try to re-enable the partition if this is the first reference */
-	if (atomic_inc_return(&pt->refcount) == 1) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&pt->lock, flags);
-
-		/* Enable the partition immediately if it's required */
-		if (partition_required(pt))
-			enable_partition(data, pt);
-
-		spin_unlock_irqrestore(&pt->lock, flags);
-	}
-}
-
-/**
- * slc_dec_refcount - Decrease the partition reference count.
- *
- * @data: The &struct slc_data tracking partition information.
- *
- * If this is the last reference being released, the partition will be disabled.
- */
-void slc_dec_refcount(struct slc_data *data)
-{
-	struct slc_partition *pt = &data->partition;
-	unsigned long flags;
-
-	/* Disable the partition if this was the last reference */
-	if (pixel_atomic_dec_and_lock_irqsave(&pt->refcount, &pt->lock, &flags)) {
-
-		/* Lazily disable the partition if it's no longer required */
-		if (!partition_required(pt))
-			queue_disable_worker(data);
-
-		spin_unlock_irqrestore(&pt->lock, flags);
-	}
-}
-
-/**
  * init_partition - Register and initialize a partition with the SLC driver.
  *
  * @data:  The &struct slc_data tracking partition information.
@@ -263,9 +141,7 @@ static int init_partition(struct slc_data *data, struct slc_partition *pt, u32 i
 		.ptid = ptid,
 		.pbha = pbha,
 		.enabled = false,
-		.refcount = ATOMIC_INIT(0),
 	};
-	spin_lock_init(&pt->lock);
 
 err_exit:
 	return err;
@@ -304,8 +180,6 @@ int slc_init_data(struct slc_data *data, struct device* dev)
 	/* Inherit the platform device */
 	data->dev = dev;
 
-	INIT_DELAYED_WORK(&data->disable_work, partition_disable_worker);
-
 	/* Register our node with the SLC driver.
 	 * This detects our partitions defined within the DT.
 	 */
@@ -335,9 +209,6 @@ err_exit:
  */
 void slc_term_data(struct slc_data *data)
 {
-	/* Ensure all pending disable ops are complete */
-	cancel_delayed_work_sync(&data->disable_work);
-
 	term_partition(data, &data->partition);
 
 	pt_client_unregister(data->pt_handle);

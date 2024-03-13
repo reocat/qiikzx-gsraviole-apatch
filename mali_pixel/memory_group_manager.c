@@ -533,22 +533,6 @@ static vm_fault_t mgm_vmf_insert_pfn_prot(
 	return fault;
 }
 
-void pixel_mgm_slc_inc_refcount(struct memory_group_manager_device* mgm_dev)
-{
-	struct mgm_groups *const data = mgm_dev->data;
-
-	slc_inc_refcount(&data->slc_data);
-}
-EXPORT_SYMBOL_GPL(pixel_mgm_slc_inc_refcount);
-
-void pixel_mgm_slc_dec_refcount(struct memory_group_manager_device* mgm_dev)
-{
-	struct mgm_groups *const data = mgm_dev->data;
-
-	slc_dec_refcount(&data->slc_data);
-}
-EXPORT_SYMBOL_GPL(pixel_mgm_slc_dec_refcount);
-
 static int mgm_initialize_data(struct mgm_groups *mgm_data)
 {
 	int i, ret;
