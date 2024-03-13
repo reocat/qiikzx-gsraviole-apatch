@@ -302,6 +302,10 @@ struct gpu_dvfs_metrics_uid_stats;
  * @dvfs.qos.bts.threshold: The G3D shader stack clock at which BTS will be enabled. Set via DT.
  * @dvfs.qos.bts.scenario:  The index of the BTS scenario to be used. Set via DT.
  *
+ * @slc.lock:           Synchronize updates to the SLC partition accounting variables.
+ * @slc.demand:         The total demand for SLC space, an aggregation of each kctx's demand.
+ * @slc.usage:          The total amount of SLC space used, an aggregation of each kctx's usage.
+ *
  * @itmon.wq:     A workqueue for ITMON page table search.
  * @itmon.work:   The work item for the above.
  * @itmon.nb:     The ITMON notifier block.
@@ -414,6 +418,12 @@ struct pixel_context {
 	} dvfs;
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 
+	struct {
+		struct mutex lock;
+		u64 demand;
+		u64 usage;
+	} slc;
+
 #if IS_ENABLED(CONFIG_EXYNOS_ITMON)
 	struct {
 		struct workqueue_struct *wq;
@@ -430,10 +440,21 @@ struct pixel_context {
  *
  * @kctx:  Handle to the parent kctx
  * @stats: Tracks the dvfs metrics for the UID associated with this context
+ *
+ * @slc.peak_demand:         The parent context's maximum demand for SLC space
+ * @slc.peak_usage:          The parent context's maximum use of SLC space
+ * @slc.idle_work:           Work item used to queue SLC partition shrink upon context idle
+ * @slc.idle_work_cancelled: Flag for async cancellation of idle_work
  */
 struct pixel_platform_data {
 	struct kbase_context *kctx;
 	struct gpu_dvfs_metrics_uid_stats* stats;
+	struct {
+		u64 peak_demand;
+		u64 peak_usage;
+		struct work_struct idle_work;
+		atomic_t idle_work_cancelled;
+	} slc;
 };
 
 #endif /* _KBASE_CONFIG_PLATFORM_H_ */
