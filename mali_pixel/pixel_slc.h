@@ -54,9 +54,6 @@ struct slc_partition {
 
 	/** @signal: Partition enable/disable signal from SLC governor */
 	u64 signal;
-
-	/** @pinned: Is the partition pinned to the enabled state */
-	bool pinned;
 };
 
 /**
@@ -90,8 +87,6 @@ u64 slc_wipe_pbha(u64 pte);
 void slc_inc_refcount(struct slc_data *data);
 
 void slc_dec_refcount(struct slc_data *data);
-
-void slc_pin(struct slc_data *data, bool pin);
 
 void slc_update_signal(struct slc_data *data, u64 signal);
 
