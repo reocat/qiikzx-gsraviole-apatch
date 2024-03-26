@@ -10,8 +10,8 @@
 # CONFIG_LOCALVERSION from some future config system.
 #
 VERSION = 1
-PATCHLEVEL = 6
-SUBLEVEL = 1
+PATCHLEVEL = 7
+SUBLEVEL = 0
 EXTRAVERSION =
 LOCAL_VERSION =
 CONFIG_LOCALVERSION =
@@ -384,7 +384,7 @@ clean: libfdt_clean pylibfdt_clean tests_clean
 	@$(VECHO) LEX $@
 	$(LEX) -o$@ $<
 
-%.tab.c %.tab.h %.output: %.y
+%.tab.c %.tab.h: %.y
 	@$(VECHO) BISON $@
 	$(BISON) -b $(basename $(basename $@)) -d $<
 
@@ -393,3 +393,7 @@ dtc-parser.h: dtc-parser.tab.h
 	ln -s $^ $@
 
 FORCE:
+
+ifeq ($(MAKE_RESTARTS),10)
+$(error "Make re-executed itself $(MAKE_RESTARTS) times. Infinite recursion?")
+endif

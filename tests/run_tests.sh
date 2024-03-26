@@ -271,6 +271,7 @@ libfdt_overlay_tests () {
 	run_dtc_test -I dts -O dtb -o $tree.test.dtb "$SRCDIR/$tree.dts"
 	run_test overlay_bad_fixup overlay_base_no_symbols.test.dtb $tree.test.dtb
     done
+    run_sh_test "$SRCDIR/dtc-fatal.sh" -I dts -O dtb -o /dev/null fixup-ref-to-path.dts
 }
 
 # Tests to exercise dtc's overlay generation support
@@ -512,9 +513,15 @@ libfdt_tests () {
     run_dtc_test -I fs -O dts -o fs.test_tree1.test.dts $FSBASE/test_tree1
     run_dtc_test -I fs -O dtb -o fs.test_tree1.test.dtb $FSBASE/test_tree1
     run_test dtbs_equal_unordered -m fs.test_tree1.test.dtb test_tree1.dtb
+    run_test get_next_tag_invalid_prop_len
 
     ## https://github.com/dgibson/dtc/issues/64
     check_tests "$SRCDIR/phandle-args-overflow.dts" clocks_property
+
+    ## https://github.com/dgibson/dtc/issues/74
+    run_dtc_test -I dts -O dtb -o cell-overflow-results.test.dtb cell-overflow-results.dts
+    run_dtc_test -I dts -O dtb -o cell-overflow.test.dtb cell-overflow.dts
+    run_test dtbs_equal_ordered cell-overflow.test.dtb cell-overflow-results.test.dtb
 
     # check full tests
     for good in test_tree1.dtb; do
