@@ -275,6 +275,7 @@ void cs40l2x_set_state(struct cs40l2x_private *cs40l2x, bool state)
 }
 EXPORT_SYMBOL(cs40l2x_set_state);
 
+#if defined(CONFIG_MODULES) && defined(MODULE)
 ssize_t strscpy_pad(char *dest, const char *src, size_t count)
 {
 	ssize_t written;
@@ -287,6 +288,7 @@ ssize_t strscpy_pad(char *dest, const char *src, size_t count)
 
 	return written;
 }
+#endif
 
 static void cs40l2x_set_gpio_event(struct cs40l2x_private *cs40l2x, bool value)
 {
