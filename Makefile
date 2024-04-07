@@ -788,12 +788,24 @@ endif
 
 ifdef CONFIG_LLVM_POLLY
 KBUILD_CFLAGS	+= -mllvm -polly \
-		           -mllvm -polly-run-inliner \
-		           -mllvm -polly-opt-fusion=max \
 		           -mllvm -polly-ast-use-context \
-		           -mllvm -polly-detect-keep-going \
-		           -mllvm -polly-vectorizer=stripmine \
-		           -mllvm -polly-invariant-load-hoisting
+				   -mllvm -polly-detect-keep-going \
+		           -mllvm -polly-dependences-analysis-type=value-based \
+		           -mllvm -polly-dependences-computeout=0 \
+		           -mllvm -polly-enable-delicm \
+    			   -mllvm -polly-invariant-load-hoisting \
+    			   -mllvm -polly-loopfusion-greedy \
+    			   -mllvm -polly-num-threads=16 \
+    			   -mllvm -polly-omp-backend=LLVM \
+    			   -mllvm -polly-optimizer=isl \
+    			   -mllvm -polly-postopts \
+    			   -mllvm -polly-reschedule \
+    			   -mllvm -polly-run-dce \
+    			   -mllvm -polly-run-inliner \
+    			   -mllvm -polly-scheduling-chunksize=1 \
+    			   -mllvm -polly-scheduling=dynamic \
+    			   -mllvm -polly-tiling \
+    			   -mllvm -polly-vectorizer=stripmine
 endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
