@@ -39,6 +39,7 @@
 #include <linux/bitops.h>
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
+#include <linux/susfs.h>
 
 #include "internal.h"
 #include "mount.h"
@@ -3537,6 +3538,9 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	struct nameidata nd;
 	int flags = op->lookup_flags;
 	struct file *filp;
+	int error;
+	if (susfs_suspicious_path(pathname, &error, SYSCALL_FAMILY_ALL_ENOENT))
+		return ERR_PTR(error);
 
 	set_nameidata(&nd, dfd, pathname);
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
@@ -3724,9 +3728,18 @@ static long do_mknodat(int dfd, const char __user *filename, umode_t mode,
 		unsigned int dev)
 {
 	struct dentry *dentry;
+	struct filename *fname;
 	struct path path;
-	int error;
+	int error, status;
 	unsigned int lookup_flags = 0;
+
+	fname = getname_safe(filename);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_MKNOD);
+	putname_safe(fname);
+
+	if (status) {
+		return error;
+	}
 
 	error = may_mknod(mode);
 	if (error)
@@ -3803,9 +3816,17 @@ EXPORT_SYMBOL_NS(vfs_mkdir, ANDROID_GKI_VFS_EXPORT_ONLY);
 static long do_mkdirat(int dfd, const char __user *pathname, umode_t mode)
 {
 	struct dentry *dentry;
+	struct filename *fname;
 	struct path path;
-	int error;
+	int error, status;
 	unsigned int lookup_flags = LOOKUP_DIRECTORY;
+
+	fname = getname_safe(pathname);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_MKDIRAT);
+	putname_safe(fname);
+
+	if (status)
+		return error;
 
 retry:
 	dentry = user_path_create(dfd, pathname, &path, lookup_flags);
@@ -3879,8 +3900,16 @@ long do_rmdir(int dfd, struct filename *name)
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
-	int type;
+	int type, status;
 	unsigned int lookup_flags = 0;
+
+	name = getname_safe(name->name);
+	status = susfs_suspicious_path(name, &error, SYSCALL_FAMILY_RMDIR);
+	putname_safe(name);
+
+	if (status) 
+		return error;
+	
 retry:
 	name = filename_parentat(dfd, name, lookup_flags,
 				&path, &last, &type);
@@ -4008,10 +4037,18 @@ long do_unlinkat(int dfd, struct filename *name)
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
-	int type;
+	int type, status;
 	struct inode *inode = NULL;
 	struct inode *delegated_inode = NULL;
 	unsigned int lookup_flags = 0;
+
+	name = getname_safe(name->name);
+	status = susfs_suspicious_path(name, &error, SYSCALL_FAMILY_UNLINKAT);
+	putname_safe(name);
+
+	if (status)
+		return error;
+
 retry:
 	name = filename_parentat(dfd, name, lookup_flags, &path, &last, &type);
 	if (IS_ERR(name))
@@ -4244,10 +4281,25 @@ static int do_linkat(int olddfd, const char __user *oldname, int newdfd,
 	      const char __user *newname, int flags)
 {
 	struct dentry *new_dentry;
+	struct filename *fname;
 	struct path old_path, new_path;
 	struct inode *delegated_inode = NULL;
 	int how = 0;
-	int error;
+	int error, status;
+
+	fname = getname_safe(oldname);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_LINKAT_OLDNAME);
+	putname_safe(fname);
+
+	if (status)
+		return error;
+
+	fname = getname_safe(newname);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_LINKAT_NEWNAME);
+	putname_safe(fname);
+
+	if (status)
+		return error;
 
 	if ((flags & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH)) != 0)
 		return -EINVAL;
@@ -4499,15 +4551,33 @@ EXPORT_SYMBOL_NS(vfs_rename, ANDROID_GKI_VFS_EXPORT_ONLY);
 int do_renameat2(int olddfd, struct filename *from, int newdfd,
 		 struct filename *to, unsigned int flags)
 {
+    const char *oldname = from->name;
+    const char *newname = to->name;
+
 	struct dentry *old_dentry, *new_dentry;
 	struct dentry *trap;
 	struct path old_path, new_path;
 	struct qstr old_last, new_last;
-	int old_type, new_type;
+	int old_type, new_type, status;
 	struct inode *delegated_inode = NULL;
+	struct filename *fname;
 	unsigned int lookup_flags = 0, target_flags = LOOKUP_RENAME_TARGET;
 	bool should_retry = false;
 	int error = -EINVAL;
+
+	fname = getname_safe(oldname);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_RENAMEAT2_OLDNAME);
+	putname_safe(fname);
+
+	if (status)
+		return error;
+
+	fname = getname_safe(newname);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_RENAMEAT2_NEWNAME);
+	putname_safe(fname);
+
+	if (status)
+		return error;
 
 	if (flags & ~(RENAME_NOREPLACE | RENAME_EXCHANGE | RENAME_WHITEOUT))
 		goto put_both;
@@ -4527,11 +4597,20 @@ retry:
 		goto put_new;
 	}
 
+	status = susfs_suspicious_path(from, &error, SYSCALL_FAMILY_RENAMEAT2_OLDNAME);
+	if (status)
+		goto exit;
+
 	to = filename_parentat(newdfd, to, lookup_flags, &new_path, &new_last,
 				&new_type);
 	if (IS_ERR(to)) {
 		error = PTR_ERR(to);
 		goto exit1;
+	}
+
+	status = susfs_suspicious_path(to, &error, SYSCALL_FAMILY_RENAMEAT2_NEWNAME);
+	if (status) {
+		goto exit;
 	}
 
 	error = -EXDEV;
@@ -4628,6 +4707,8 @@ exit1:
 		lookup_flags |= LOOKUP_REVAL;
 		goto retry;
 	}
+exit:
+	return error;
 put_both:
 	if (!IS_ERR(from))
 		putname(from);

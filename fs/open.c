@@ -32,6 +32,7 @@
 #include <linux/ima.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
+#include <linux/susfs.h>
 
 #include "internal.h"
 #include <trace/hooks/syscall_check.h>
@@ -123,7 +124,15 @@ long do_sys_truncate(const char __user *pathname, loff_t length)
 {
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 	struct path path;
-	int error;
+	struct filename *fname;
+	int error, status;
+
+	fname = getname_safe(pathname);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_ALL_ENOENT);
+	putname_safe(fname);
+
+	if (status) 
+		return error;
 
 	if (length < 0)	/* sorry, but loff_t says... */
 		return -EINVAL;
@@ -403,12 +412,19 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
 {
 	struct path path;
 	struct inode *inode;
-	int res;
+	struct filename *fname;
+	int res, status, error;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 	const struct cred *old_cred = NULL;
 	#ifdef CONFIG_KSU
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
     #endif
+	fname = getname_safe(filename);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_ALL_ENOENT);
+	putname_safe(fname);
+
+	if (status)
+		return error;
 
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
@@ -492,9 +508,18 @@ SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
 
 SYSCALL_DEFINE1(chdir, const char __user *, filename)
 {
+	struct filename *fname;
 	struct path path;
-	int error;
+	int error, status;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
+
+	fname = getname_safe(filename);
+	status = susfs_suspicious_path(fname, &error, SYSCALL_FAMILY_ALL_ENOENT);
+	putname_safe(fname);
+
+	if (status)
+		return error;
+
 retry:
 	error = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
 	if (error)

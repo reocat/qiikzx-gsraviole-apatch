@@ -21,6 +21,7 @@
 #include <linux/unistd.h>
 #include <linux/compat.h>
 #include <linux/uaccess.h>
+#include <linux/susfs.h>
 
 #include <asm/unaligned.h>
 
@@ -400,6 +401,9 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 		return -EINTR;
 	dirent = buf->current_dir;
 	prev = (void __user *)dirent - prev_reclen;
+	if (susfs_suspicious_ino_for_filldir64(ino)) {
+		return 0;
+	}
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
 		goto efault;
 

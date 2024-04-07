@@ -20,6 +20,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
 #include <linux/pkeys.h>
+#include <linux/susfs.h>
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -432,6 +433,12 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 
 	start = vma->vm_start;
 	end = vma->vm_end;
+
+	if (ino > 0) {
+		if (susfs_suspicious_kstat_or_hide_in_maps(ino, &ino, &dev)) 
+			return;	
+	}
+
 	if (show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino))
 		return;
 

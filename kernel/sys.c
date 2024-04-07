@@ -43,6 +43,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/version.h>
 #include <linux/ctype.h>
+#include <linux/susfs.h>
 
 #include <linux/compat.h>
 #include <linux/syscalls.h>
@@ -1277,6 +1278,7 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
 	up_read(&uts_sem);
+	susfs_spoof_uname(&tmp);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 

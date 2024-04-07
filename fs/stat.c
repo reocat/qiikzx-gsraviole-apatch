@@ -17,6 +17,7 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/compat.h>
+#include <linux/susfs.h>
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
@@ -125,6 +126,9 @@ int vfs_getattr(const struct path *path, struct kstat *stat,
 		u32 request_mask, unsigned int query_flags)
 {
 	int retval;
+
+	if (susfs_is_suspicious_path(path, &retval, SYSCALL_FAMILY_ALL_ENOENT))
+		return retval;
 
 	retval = security_inode_getattr(path);
 	if (retval)
@@ -353,6 +357,7 @@ static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 #endif
 	tmp.st_blocks = stat->blocks;
 	tmp.st_blksize = stat->blksize;
+	susfs_suspicious_kstat(tmp.st_ino, &tmp);
 	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
