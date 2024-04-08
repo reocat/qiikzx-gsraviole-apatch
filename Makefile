@@ -808,6 +808,24 @@ KBUILD_CFLAGS	+= -mllvm -polly \
     			   -mllvm -polly-vectorizer=stripmine
 endif
 
+ifdef CONFIG_LLVM_EXTENDED
+KBUILD_CFLAGS	+= -mllvm -enable-interleaved-mem-accesses \
+		           -mllvm -extra-vectorizer-passes \
+		           -mllvm -enable-cond-stores-vec \
+		           -mllvm -slp-vectorize-hor-store \
+		           -mllvm -enable-loopinterchange \
+		           -mllvm -enable-loop-distribute \
+		           -mllvm -enable-unroll-and-jam \
+		           -mllvm -enable-loop-flatten \
+		           -mllvm -unroll-runtime-multi-exit \
+		           -mllvm -aggressive-ext-opt \
+		           -mllvm -adce-remove-loops \
+		           -mllvm -enable-ext-tsp-block-placement \
+		           -mllvm -enable-gvn-hoist \
+		           -mllvm -enable-dfa-jump-thread \
+		           -mllvm -vectorizer-maximize-bandwidth
+endif
+
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
 KBUILD_CFLAGS	+= $(call cc-option,-fno-allow-store-data-races)
