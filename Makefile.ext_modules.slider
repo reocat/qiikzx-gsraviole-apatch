@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
-rel_path := ../google-modules
+rel_path := google-modules
 
 ext_modules :=
 ext_modules += amplifiers/audiometrics

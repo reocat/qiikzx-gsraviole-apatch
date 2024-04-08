@@ -259,7 +259,7 @@ endif
 #
 # KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 #
-EXTRA_SYMBOLS += $(OUT_DIR)/../google-modules/gpu/mali_pixel/Module.symvers
+EXTRA_SYMBOLS += $(OUT_DIR)/google-modules/gpu/mali_pixel/Module.symvers
 
 CFLAGS_MODULE += -Wall -Werror
 
