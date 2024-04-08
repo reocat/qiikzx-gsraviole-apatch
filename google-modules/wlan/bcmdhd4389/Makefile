@@ -28,7 +28,7 @@ ifneq ($(KERNEL_SRC),)
 endif
 
 ifneq ($(CONFIG_WLAN_TRACKER),)
-KBUILD_EXTRA_SYMBOLS=$(OUT_DIR)/../google-modules/wlan/wlan_ptracker/Module.symvers
+KBUILD_EXTRA_SYMBOLS=$(OUT_DIR)/google-modules/wlan/wlan_ptracker/Module.symvers
 endif
 
 all:

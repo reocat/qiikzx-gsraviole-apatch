@@ -255,7 +255,7 @@ endif
 #
 # KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 #
-BASE_SYMBOLS = $(OUT_DIR)/../google-modules/gpu/mali_pixel/Module.symvers
+BASE_SYMBOLS = $(OUT_DIR)/google-modules/gpu/mali_pixel/Module.symvers
 
 EXTRA_SYMBOLS += \
     $(BASE_SYMBOLS)
