@@ -30,11 +30,7 @@ extern struct be_path_cache port_array[PORT_MAX];
  * by sink-associated devices such as spker, headphone, bt, usb, mode
  */
 static aoc_audio_sink[] = {
-#if IS_ENABLED(CONFIG_SOC_GS101)
 	[PORT_I2S_0_RX] = SINK_HEADPHONE, [PORT_I2S_0_TX] = -1,
-#else
-	[PORT_I2S_0_RX] = SINK_UNUSED,    [PORT_I2S_0_TX] = -1,
-#endif
 	[PORT_I2S_1_RX] = SINK_BT,        [PORT_I2S_1_TX] = -1,
 	[PORT_I2S_2_RX] = SINK_USB,       [PORT_I2S_2_TX] = -1,
 	[PORT_TDM_0_RX] = SINK_SPEAKER,   [PORT_TDM_0_TX] = -1,
