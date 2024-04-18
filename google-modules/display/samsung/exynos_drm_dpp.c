@@ -1220,7 +1220,7 @@ static int dpp_init_resources(struct dpp_device *dpp)
 	struct resource res;
 	struct device *dev = dpp->dev;
 	struct device_node *np = dev->of_node;
-	struct platform_device *pdev;
+	__maybe_unused struct platform_device *pdev;
 	int i, ret = 0;
 
 	pdev = container_of(dev, struct platform_device, dev);
@@ -1301,7 +1301,7 @@ struct exynos_dma *exynos_cgc_dma_register(struct decon_device *decon)
 	struct device *dev = decon->dev;
 	struct device_node *np = dev->of_node;
 	struct exynos_dma *dma;
-	struct platform_device *pdev;
+	__maybe_unused struct platform_device *pdev;
 	int i, ret = 0;
 	struct resource res;
 
