@@ -797,10 +797,6 @@ static ssize_t cancel_boot_freq_store(struct device *dev,
 					       struct device_attribute *attr,
 					       const char *buf, size_t count)
 {
-	struct device *parent = dev->parent;
-	struct platform_device *pdev =
-		container_of(parent, struct platform_device, dev);
-	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
 	int ret;
 	bool cancel_flag;
 
