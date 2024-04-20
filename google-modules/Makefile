@@ -4,6 +4,7 @@ LINUXINCLUDE += -include $(srctree)/google-modules/google-modules-conf.h
 
 obj-y += amplifiers/cs35l41/
 obj-y += amplifiers/cs40l25/
+obj-y += amplifiers/cs40l26/
 obj-y += aoc/
 obj-y += aoc/alsa/
 obj-y += aoc/usb/
@@ -18,5 +19,6 @@ obj-y += nfc/
 obj-y += power/reset/
 obj-y += touch/common/
 obj-y += touch/fts/ftm5/
+obj-y += touch/sec/
 obj-y += video/gchips/
 obj-y += wlan/bcmdhd4389/
