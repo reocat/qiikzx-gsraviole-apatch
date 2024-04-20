@@ -29,7 +29,8 @@ dtbo-$(CONFIG_BOARD_SLIDER) += \
 	gs101-raven-evt-wingboard.dtbo \
 	gs101-raven-evt1.dtbo \
 	gs101-raven-proto1.dtbo \
-	gs101-raven-proto1_1.dtbo
+	gs101-raven-proto1_1.dtbo \
+	gs101-bluejay-mp1_0.dtbo
 
 gs101-slider.dtbo-base := gs101-a0.dtb
 gs101-slider2.dtbo-base := gs101-a0.dtb
@@ -49,6 +50,7 @@ gs101-raven-evt-wingboard.dtbo-base := gs101-b0.dtb
 gs101-raven-evt1.dtbo-base := gs101-b0.dtb
 gs101-raven-proto1.dtbo-base := gs101-b0.dtb
 gs101-raven-proto1_1.dtbo-base := gs101-b0.dtb
+gs101-bluejay-mp1_0.dtbo-base := gs101-b0.dtb
 
 gs101-dpm-eng.dtbo-base := gs101-b0.dtb
 gs101-dpm-user.dtbo-base := gs101-b0.dtb
