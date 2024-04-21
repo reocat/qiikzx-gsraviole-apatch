@@ -148,45 +148,45 @@ void edgetpu_telemetry_inc_mmap_count(struct edgetpu_dev *etdev, enum edgetpu_te
 void edgetpu_telemetry_dec_mmap_count(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
 				      int core_id);
 #else
-int edgetpu_telemetry_init(struct edgetpu_dev *etdev,
+static inline int edgetpu_telemetry_init(struct edgetpu_dev *etdev,
 			   struct edgetpu_coherent_mem *log_mem,
 			   struct edgetpu_coherent_mem *trace_mem) 
 {
 	return 0;
 }
-void edgetpu_telemetry_exit(struct edgetpu_dev *etdev) 
+static inline void edgetpu_telemetry_exit(struct edgetpu_dev *etdev) 
 {
 }
-int edgetpu_telemetry_kci(struct edgetpu_dev *etdev) 
+static inline int edgetpu_telemetry_kci(struct edgetpu_dev *etdev) 
 {
 	return 0;
 }
-int edgetpu_telemetry_set_event(struct edgetpu_dev *etdev,
+static inline int edgetpu_telemetry_set_event(struct edgetpu_dev *etdev,
 				enum edgetpu_telemetry_type type, u32 eventfd) 
 {
 	return 0;
 }
-void edgetpu_telemetry_unset_event(struct edgetpu_dev *etdev,
+static inline void edgetpu_telemetry_unset_event(struct edgetpu_dev *etdev,
 				   enum edgetpu_telemetry_type type) 
 {
 }
-void edgetpu_telemetry_irq_handler(struct edgetpu_dev *etdev) 
+static inline void edgetpu_telemetry_irq_handler(struct edgetpu_dev *etdev) 
 {
 }
-void edgetpu_telemetry_mappings_show(struct edgetpu_dev *etdev,
+static inline void edgetpu_telemetry_mappings_show(struct edgetpu_dev *etdev,
 				     struct seq_file *s) 
 {
 }
-int edgetpu_mmap_telemetry_buffer(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
+static inline int edgetpu_mmap_telemetry_buffer(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
 				  struct vm_area_struct *vma, int core_id) 
 {
 	return -ENODEV;
 }
-void edgetpu_telemetry_inc_mmap_count(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
+static inline void edgetpu_telemetry_inc_mmap_count(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
 				      int core_id) 
 {
 }
-void edgetpu_telemetry_dec_mmap_count(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
+static inline void edgetpu_telemetry_dec_mmap_count(struct edgetpu_dev *etdev, enum edgetpu_telemetry_type type,
 				      int core_id) 
 {
 }

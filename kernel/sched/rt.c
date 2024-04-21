@@ -2568,7 +2568,7 @@ const struct sched_class rt_sched_class
 
 #ifdef CONFIG_SMP
 	.balance		= balance_rt,
-	.select_task_rq		= select_task_rq_rt,
+	.select_task_rq		= (int (*)(struct task_struct *, int, int, int))select_task_rq_rt,
 	.set_cpus_allowed       = set_cpus_allowed_common,
 	.rq_online              = rq_online_rt,
 	.rq_offline             = rq_offline_rt,
