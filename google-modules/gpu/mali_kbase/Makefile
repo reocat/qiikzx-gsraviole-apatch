@@ -256,11 +256,6 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     EXTRA_CFLAGS += -DCONFIG_MALI_NO_MALI_DEFAULT_GPU='\"$(CONFIG_MALI_NO_MALI_DEFAULT_GPU)\"'
 endif
 
-#
-# KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
-#
-EXTRA_SYMBOLS += $(OUT_DIR)/google-modules/gpu/mali_pixel/Module.symvers
-
 CFLAGS_MODULE += -Wall -Werror
 
 # The following were added to align with W=1 in scripts/Makefile.extrawarn
