@@ -6,9 +6,7 @@ soc-dtbo-$(CONFIG_SOC_GS101) += \
 
 DTC_FLAGS_gs101-dpm-user += -a 4096
 
-dtbo-$(CONFIG_BOARD_SLIDER) += \
-	gs101-oriole.dtbo \
-	gs101-raven.dtbo
+dtbo-$(CONFIG_BOARD_SLIDER) += gs101-oriole.dtbo
 
 gs101-oriole.dtbo-base := gs101-b0.dtb
 gs101-raven.dtbo-base := gs101-b0.dtb
