@@ -4097,7 +4097,6 @@ static bool read_heatmap_raw(struct v4l2_heatmap *v4l2)
 
 	return true;
 }
-#endif
 
 /* Update a state machine used to toggle control of the touch IC's motion
  * filter.
@@ -4157,6 +4156,7 @@ static int update_motion_filter(struct fts_ts_info *info,
 
 	return 0;
 }
+#endif
 
 int fts_enable_grip(struct fts_ts_info *info, bool enable)
 {
