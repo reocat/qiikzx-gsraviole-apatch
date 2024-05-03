@@ -2447,7 +2447,6 @@ void goog_offload_remove(struct goog_touch_interface *gti)
 }
 #endif
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
 bool goog_input_legacy_report(struct goog_touch_interface *gti)
 {
 	if (!gti->offload.offload_running)
@@ -2455,7 +2454,6 @@ bool goog_input_legacy_report(struct goog_touch_interface *gti)
 
 	return false;
 }
-#endif
 
 int goog_input_process(struct goog_touch_interface *gti, bool reset_data)
 {
