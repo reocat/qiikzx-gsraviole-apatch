@@ -89,6 +89,11 @@ config PCI_EXYNOS
 	depends on PCI_MSI_IRQ_DOMAIN
 	select PCIEPORTBUS
 	select PCIE_DW_HOST
+	
+config PCI_EXYNOS_DEBUG
+	tristate "Debugging Samsung Exynos PCIe controller"
+	depends on PCI_EXYNOS
+	default n
 
 config PCI_EXYNOS_CAL_GS201
 	tristate "Samsung Exynos PCIe PHY CAL for GS201"
