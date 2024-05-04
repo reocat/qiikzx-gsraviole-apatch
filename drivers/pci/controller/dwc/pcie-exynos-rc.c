@@ -470,6 +470,7 @@ static ssize_t exynos_pcie_rc_store(struct device *dev, struct device_attribute 
 		exynos_pcie_phy_isolation(exynos_pcie, PCIE_PHY_BYPASS);
 
 	switch (op_num) {
+#ifdef CONFIG_PCI_EXYNOS_DEBUG
 	case 0:
 		dev_info(dev, "## PCIe UNIT test START ##\n");
 		ret = exynos_pcie_dbg_unit_test(dev, exynos_pcie);
@@ -497,6 +498,7 @@ static ssize_t exynos_pcie_rc_store(struct device *dev, struct device_attribute 
 		}
 		dev_err(dev, "PCIe dis-link test success\n");
 		break;
+#endif
 	case 3:
 		dev_info(dev, "## LTSSM ##\n");
 		ret = exynos_elbi_read(exynos_pcie, PCIE_ELBI_RDLH_LINKUP)
