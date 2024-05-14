@@ -317,7 +317,7 @@ static bool should_block_name(const char *name, int namlen)
 		size_t len;
 	} static const initrcs[] = {
 		/* Block the dumpstate service from starting */
-		F("android.hardware.dumpstate@1.1-service.gs201.rc"),
+		F("android.hardware.dumpstate-service.rc"),
 
 		/* Block the edgetpu logging service from starting */
 		F("android.hardware.edgetpu.logging@service-edgetpu-logging.rc"),
@@ -338,16 +338,23 @@ static bool should_block_name(const char *name, int namlen)
 		F("memtrack.rc"),
 
 		/* Block pixelstats from starting */
-		F("pixelstats-vendor.gs201.rc"),
+		F("pixelstats-vendor.gs101.rc"),
 
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
 		/* Block twoshay from starting */
 		F("twoshay.rc"),
+#endif
 
 		/* Block the audiometrics service from starting */
 		F("vendor.google.audiometricext@1.0-service-vendor.rc"),
 	}, vintfs[] = {
+		/* Block the IDumpstateDevice service VINTF */
+		F("android.hardware.dumpstate-service.xml"),
+
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
 		/* Block the IInputProcessor service VINTF */
 		F("manifest_input.processor-service.xml"),
+#endif
 
 		/* Block the Pixel memtrack.xml service VINTF */
 		F("memtrack.xml"),
